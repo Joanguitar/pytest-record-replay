@@ -33,6 +33,32 @@ def test_recall_rejects_keyword_argument_mismatch():
         NoMockRecall("dependency", calls=calls)(value="different")
 
 
+def test_record_rejects_non_dillable_positional_argument():
+    recorder = NoMockRecord("dependency", dependency)
+    value = (item for item in ())
+
+    with pytest.raises(ValueError, match="Argument .* is not picklable"):
+        recorder(value)
+
+
+def test_record_rejects_non_dillable_keyword_argument():
+    recorder = NoMockRecord("dependency", dependency)
+    value = (item for item in ())
+
+    with pytest.raises(ValueError, match="Keyword argument value=.* is not picklable"):
+        recorder(value=value)
+
+
+def test_record_rejects_non_dillable_output():
+    def returns_generator():
+        return (item for item in ())
+
+    recorder = NoMockRecord("dependency", returns_generator)
+
+    with pytest.raises(ValueError, match="Output .* is not picklable"):
+        recorder()
+
+
 def test_function_wrapper_records_call(tmp_path, monkeypatch):
     monkeypatch.setattr(
         FunctionWCalls,

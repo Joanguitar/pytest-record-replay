@@ -60,5 +60,5 @@ def test_fetch_data():
 With `--record`, the original callable runs and calls are saved to
 `.nopatch-recordings.pkl` under pytest's root directory. Without `--record`,
 the saved outputs are replayed and inputs are checked against the recording.
-The recording file uses Python pickle; only load files created by trusted test
-runs.
+The recording file uses dill serialization; only load files created by trusted
+test runs.

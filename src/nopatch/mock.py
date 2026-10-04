@@ -2,7 +2,7 @@
 
 import importlib
 import inspect
-import pickle
+import dill
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -24,9 +24,9 @@ from typing_extensions import ParamSpec, TypeAlias
 import unittest
 
 _HParams = ParamSpec(
-    "_HParams", bound=Hashable
-)  # Non-mutable parameters for a function
-_RType = TypeVar("_RType")  # Non-mutable return type for a function
+    "_HParams"
+)
+_RType = TypeVar("_RType")
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,15 @@ class NoMockRecord(NoMockBase):
         self.function = function
 
     def _execute_mock_call(self, /, *args, **kwargs):
+        for arg in args:
+            if not dill.pickles(arg):
+                raise ValueError(f"Argument {arg} is not picklable.")
+        for key, value in kwargs.items():
+            if not dill.pickles(value):
+                raise ValueError(f"Keyword argument {key}={value} is not picklable.")
         output = self.function(*args, **kwargs)
+        if not dill.pickles(output):
+            raise ValueError(f"Output {output} is not picklable.")
         self._calls.append(
             _Call(target=self._target, args=args, kwargs=kwargs, output=output)
         )
@@ -166,12 +174,12 @@ class FunctionWCalls(Generic[_HParams]):
     def _save_file(self, file: Path):
         """Save the calls to a file."""
         with open(file, "wb") as f:
-            pickle.dump(self.calls, f)
+            dill.dump(self.calls, f)
 
     def _load_file(self, file: Path):
         """Load the calls from a file."""
         with open(file, "rb") as f:
-            calls_data = pickle.load(f)
+            calls_data = dill.load(f)
             self.calls.clear()
             self.calls.extend(calls_data)
 
