@@ -59,6 +59,29 @@ def test_record_rejects_non_dillable_output():
         recorder()
 
 
+def test_recorded_call_deep_copies_args_kwargs_and_output():
+    def mutate_inputs_and_return(positional, *, keyword):
+        positional.append("during call")
+        keyword["items"].append("during call")
+        return {"items": ["output"]}
+
+    positional = ["before call"]
+    keyword = {"items": ["before call"]}
+    calls = []
+    recorder = NoMockRecord(
+        "mutate_inputs_and_return", mutate_inputs_and_return, calls=calls
+    )
+
+    result = recorder(positional, keyword=keyword)
+    result["items"].append("after call")
+    positional.append("after call")
+    keyword["items"].append("after call")
+
+    assert calls[0].args == (["before call"],)
+    assert calls[0].kwargs == {"keyword": {"items": ["before call"]}}
+    assert calls[0].output == {"items": ["output"]}
+
+
 def test_function_wrapper_records_call(tmp_path, monkeypatch):
     monkeypatch.setattr(
         FunctionWCalls,

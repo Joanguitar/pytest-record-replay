@@ -3,6 +3,7 @@
 import importlib
 import inspect
 import dill
+from copy import deepcopy
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -82,11 +83,19 @@ class NoMockRecord(NoMockBase):
         for key, value in kwargs.items():
             if not dill.pickles(value):
                 raise ValueError(f"Keyword argument {key}={value} is not picklable.")
+        recorded_args = deepcopy(args)
+        recorded_kwargs = deepcopy(kwargs)
         output = self.function(*args, **kwargs)
         if not dill.pickles(output):
             raise ValueError(f"Output {output} is not picklable.")
+        recorded_output = deepcopy(output)
         self._calls.append(
-            _Call(target=self._target, args=args, kwargs=kwargs, output=output)
+            _Call(
+                target=self._target,
+                args=recorded_args,
+                kwargs=recorded_kwargs,
+                output=recorded_output,
+            )
         )
         return output
 
