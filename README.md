@@ -40,3 +40,19 @@ first_result = recording("item-1")
 recall = NoMockRecall(recording)
 assert recall("item-1") == first_result
 ```
+
+To patch a dotted target in tests, use `nopatch.patch`:
+
+```python
+from nopatch import patch
+
+def test_fetch_data():
+	with patch("myapp.client.fetch_data") as fetch_data:
+		result = fetch_data("item-1")
+```
+
+With `--record`, the original callable runs and calls are saved to
+`.nopatch-recordings.pkl` under pytest's root directory. Without `--record`,
+the saved outputs are replayed and inputs are checked against the recording.
+The recording file uses Python pickle; only load files created by trusted test
+runs.
