@@ -5,7 +5,9 @@ import inspect
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
+from functools import wraps
 from typing import (
     Any,
     Callable,
@@ -19,6 +21,7 @@ from typing import (
 )
 from unittest.mock import MagicMock, Mock, NonCallableMock, patch
 from typing_extensions import TypeAlias
+import unittest
 
 _Params = ParamSpec("_Params")
 _RType = TypeVar("_RType")
@@ -111,13 +114,16 @@ class FunctionWCalls(Generic[_Params]):
         self.record: bool = record
 
     def __call__(self, *args: _Params.args, **kwargs: _Params.kwargs) -> None:
-        return self.func(*args, **kwargs)
+        if self.record:
+            self._call_record(*args, **kwargs)
+        else:
+            self._call_recall(*args, **kwargs)
 
     def _call_record(self, *args: _Params.args, **kwargs: _Params.kwargs):
         assert len(self.calls) == 0, "Calls should be empty before recording."
         self.calls.clear()
         self.func(*args, **kwargs)
-        self.save(str(_timestamp))
+        self.save(datetime.now().isoformat())
 
     def _call_recall(self, *args: _Params.args, **kwargs: _Params.kwargs):
         files = self.files
@@ -127,6 +133,7 @@ class FunctionWCalls(Generic[_Params]):
             if ii > 0:
                 self._TestCaseReset()
             self.func(*args, **kwargs)
+            assert len(self.calls) == 0, f"Unconsumed calls remain after replaying {file}."
 
     def _TestCaseReset(self):
         """Calls tearDown/setUp method if the function is a method of a TestCase."""
@@ -166,7 +173,12 @@ class FunctionWCalls(Generic[_Params]):
 
             calls_data = json.load(f)
             self.calls.clear()
-            self.calls.extend(_Call(**call_data) for call_data in calls_data)
+            self.calls.extend(
+                _Call(
+                    **{**call_data, "args": tuple(call_data["args"])}
+                )
+                for call_data in calls_data
+            )
 
     def save(self, name: str):
         """Save the calls to a file."""
@@ -205,3 +217,4 @@ def nopatch(target: str):
         else:
             _func = patch(target, NoMockRecall(target, calls=calls))(func.func)
         return FunctionWCalls(_func, record=func.record, calls=calls)
+    return wrapper

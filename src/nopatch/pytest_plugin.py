@@ -1,11 +1,6 @@
 """Pytest integration for nopatch."""
 
-import pickle
-from pathlib import Path
-
 import pytest
-
-from .mock import _configure_patch
 
 
 _RECORDINGS_FILE = ".nopatch-recordings.pkl"
@@ -23,6 +18,8 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     """Configure wrappers and load the saved call history for this run."""
     record = config.getoption("--record")
+    from .mock import _configure_patch
+
     _configure_patch(record)
 
 
