@@ -8,6 +8,6 @@ __all__ = ["NoMockRecord", "NoMockRecall", "nopatch", "nodecorator"]
 
 
 def __getattr__(name):
-	if name not in __all__:
-		raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-	return getattr(import_module(".mock", __name__), name)
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(".mock", __name__), name)

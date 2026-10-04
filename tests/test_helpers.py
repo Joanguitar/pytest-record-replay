@@ -141,7 +141,7 @@ def test_function_path_for_function_and_method():
     assert method_path.parts[-2:] == ("Example", "method")
 
 
-def test_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch):
+def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
@@ -152,11 +152,30 @@ def test_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch):
     wrapper.save("z-last")
     wrapper.save("a-first")
 
-    assert [path.name for path in wrapper.files] == ["a-first.json", "z-last.json"]
+    assert [path.name for path in wrapper.files] == ["a-first.pkl", "z-last.pkl"]
 
     wrapper.calls.clear()
     wrapper._load_file(wrapper.files[0])
     assert wrapper.calls == [_Call("identity", ("value",), {}, "value")]
+
+
+def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        FunctionWCalls,
+        "path",
+        property(lambda self: tmp_path / "recordings"),
+    )
+    wrapper = FunctionWCalls(identity)
+    original = _Call("identity", (b"value",), {"tags": {"one", "two"}}, b"result")
+    wrapper.calls.append(original)
+    wrapper.save("typed-values")
+
+    wrapper.calls.clear()
+    wrapper._load_file(wrapper.files[0])
+
+    assert wrapper.calls == [original]
+    assert isinstance(wrapper.calls[0].args[0], bytes)
+    assert isinstance(wrapper.calls[0].kwargs["tags"], set)
 
 
 def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):

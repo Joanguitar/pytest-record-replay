@@ -5,8 +5,11 @@ Record/recall logic for testing, integrated with pytest.
 ## Install
 
 ```bash
-python -m pip install -e .
+python -m pip install -e '.[test]'
 ```
+
+The `test` extra installs pytest-cov for the configured coverage reports. A
+regular `python -m pip install -e .` install does not include coverage tooling.
 
 Pytest loads the `nopatch` plugin automatically after installation. Use
 `--record` to enable recording mode; without it, recording mode is disabled.

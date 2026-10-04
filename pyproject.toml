@@ -8,8 +8,15 @@ version = "0.0.1"
 description = "Record and recall behavior in pytest tests"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.9"
-dependencies = ["pytest>=7", "pytest-cov>=4", "typing-extensions>=4"]
+requires-python = ">=3.8"
+dependencies = [
+    "pytest>=7,<9; python_version < '3.10'",
+    "pytest>=7; python_version >= '3.10'",
+    "typing-extensions>=4.12",
+]
+
+[project.optional-dependencies]
+test = ["pytest-cov>=4"]
 
 [project.entry-points.pytest11]
 "nopatch.pytest_plugin" = "nopatch.pytest_plugin"

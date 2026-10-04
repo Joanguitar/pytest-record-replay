@@ -3,9 +3,6 @@
 import pytest
 
 
-_RECORDINGS_FILE = ".nopatch-recordings.pkl"
-
-
 def pytest_addoption(parser):
     parser.addoption(
         "--record",

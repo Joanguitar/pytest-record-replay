@@ -2,6 +2,7 @@
 
 import importlib
 import inspect
+import pickle
 from pathlib import Path
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -15,16 +16,17 @@ from typing import (
     List,
     Optional,
     Tuple,
-    ParamSpec,
     TypeVar,
     Generic,
 )
 from unittest.mock import MagicMock, Mock, NonCallableMock, patch
-from typing_extensions import TypeAlias
+from typing_extensions import ParamSpec, TypeAlias
 import unittest
 
-_Params = ParamSpec("_Params")
-_RType = TypeVar("_RType")
+_HParams = ParamSpec(
+    "_HParams", bound=Hashable
+)  # Non-mutable parameters for a function
+_RType = TypeVar("_RType")  # Non-mutable return type for a function
 
 
 @dataclass(frozen=True)
@@ -100,12 +102,12 @@ class NoMockRecall(NoMockBase):
         return call.output
 
 
-class FunctionWCalls(Generic[_Params]):
+class FunctionWCalls(Generic[_HParams]):
     """Wrap a test function to have calls attribute."""
 
     def __init__(
         self,
-        function: Callable[_Params, None],
+        function: Callable[_HParams, None],
         record: bool = False,
         calls: Optional[List[_Call]] = None,
     ):
@@ -113,19 +115,19 @@ class FunctionWCalls(Generic[_Params]):
         self.calls: List[_Call] = calls if calls is not None else []
         self.record: bool = record
 
-    def __call__(self, *args: _Params.args, **kwargs: _Params.kwargs) -> None:
+    def __call__(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> None:
         if self.record:
             self._call_record(*args, **kwargs)
         else:
             self._call_recall(*args, **kwargs)
 
-    def _call_record(self, *args: _Params.args, **kwargs: _Params.kwargs):
+    def _call_record(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
         assert len(self.calls) == 0, "Calls should be empty before recording."
         self.calls.clear()
         self.func(*args, **kwargs)
         self.save(datetime.now().isoformat())
 
-    def _call_recall(self, *args: _Params.args, **kwargs: _Params.kwargs):
+    def _call_recall(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
         files = self.files
         assert len(files) > 0, "No recorded calls found."
         for ii, file in enumerate(files):
@@ -133,7 +135,9 @@ class FunctionWCalls(Generic[_Params]):
             if ii > 0:
                 self._TestCaseReset()
             self.func(*args, **kwargs)
-            assert len(self.calls) == 0, f"Unconsumed calls remain after replaying {file}."
+            assert len(self.calls) == 0, (
+                f"Unconsumed calls remain after replaying {file}."
+            )
 
     def _TestCaseReset(self):
         """Calls tearDown/setUp method if the function is a method of a TestCase."""
@@ -157,44 +161,35 @@ class FunctionWCalls(Generic[_Params]):
     @property
     def files(self) -> List[Path]:
         """Return a list of files containing the calls."""
-        return sorted(self.path.glob("*.json"))
+        return sorted(self.path.glob("*.pkl"))
 
     def _save_file(self, file: Path):
         """Save the calls to a file."""
-        with open(file, "w") as f:
-            import json
-
-            json.dump([call.__dict__ for call in self.calls], f, default=str)
+        with open(file, "wb") as f:
+            pickle.dump(self.calls, f)
 
     def _load_file(self, file: Path):
         """Load the calls from a file."""
-        with open(file, "r") as f:
-            import json
-
-            calls_data = json.load(f)
+        with open(file, "rb") as f:
+            calls_data = pickle.load(f)
             self.calls.clear()
-            self.calls.extend(
-                _Call(
-                    **{**call_data, "args": tuple(call_data["args"])}
-                )
-                for call_data in calls_data
-            )
+            self.calls.extend(calls_data)
 
     def save(self, name: str):
         """Save the calls to a file."""
         self.path.mkdir(parents=True, exist_ok=True)
-        file = self.path / (name + ".json")
+        file = self.path / (name + ".pkl")
         self._save_file(file)
 
 
 def nodecorator(
-    record: None | bool = None,
-) -> Callable[[Callable[_Params, None]], FunctionWCalls[_Params]]:
+    record: Optional[bool] = None,
+) -> Callable[[Callable[_HParams, None]], FunctionWCalls[_HParams]]:
     """Return the function without any decoration."""
     if record is None:
         record = _record_mode
 
-    def wrapper(func: Callable[_Params, None]) -> FunctionWCalls[_Params]:
+    def wrapper(func: Callable[_HParams, None]) -> FunctionWCalls[_HParams]:
         if isinstance(func, FunctionWCalls):
             raise ValueError(
                 "@nodecorator should be applied before any @nopatch decorator."
@@ -205,7 +200,7 @@ def nodecorator(
 
 
 def nopatch(target: str):
-    def wrapper(func: FunctionWCalls[_Params]) -> FunctionWCalls[_Params]:
+    def wrapper(func: FunctionWCalls[_HParams]) -> FunctionWCalls[_HParams]:
         if not isinstance(func, FunctionWCalls):
             func = nodecorator()(func)
         calls = func.calls
@@ -217,4 +212,5 @@ def nopatch(target: str):
         else:
             _func = patch(target, NoMockRecall(target, calls=calls))(func.func)
         return FunctionWCalls(_func, record=func.record, calls=calls)
+
     return wrapper
