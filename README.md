@@ -24,3 +24,19 @@ def test_example(nopatch_recording):
 	else:
 		...  # recall behavior
 ```
+
+## Record and recall a callable
+
+`NoMockRecord` calls the original function and saves each call in order.
+`NoMockRecall` replays those outputs, checking that each input matches the
+recorded call without invoking the original function again.
+
+```python
+from nopatch import NoMockRecord, NoMockRecall
+
+recording = NoMockRecord(fetch_data)
+first_result = recording("item-1")
+
+recall = NoMockRecall(recording)
+assert recall("item-1") == first_result
+```
