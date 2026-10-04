@@ -19,10 +19,10 @@ Tests can inspect the mode with the `nopatch_recording` fixture:
 
 ```python
 def test_example(nopatch_recording):
-	if nopatch_recording:
-		...  # record behavior
-	else:
-		...  # recall behavior
+    if nopatch_recording:
+        ...  # record behavior
+    else:
+        ...  # recall behavior
 ```
 
 ## Record and recall a callable
@@ -46,9 +46,10 @@ To patch a dotted target in tests, use `nopatch.patch`:
 ```python
 from nopatch import patch
 
+
 def test_fetch_data():
-	with patch("myapp.client.fetch_data") as fetch_data:
-		result = fetch_data("item-1")
+    with patch("myapp.client.fetch_data") as fetch_data:
+        result = fetch_data("item-1")
 ```
 
 With `--record`, the original callable runs and calls are saved to
