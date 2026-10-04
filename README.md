@@ -10,6 +10,8 @@ python -m pip install -e .
 
 Pytest loads the `nopatch` plugin automatically after installation. Use
 `--record` to enable recording mode; without it, recording mode is disabled.
+Running `pytest` also measures branch coverage and writes a detailed HTML report
+to `coverage/index.html`.
 
 ```bash
 pytest --record

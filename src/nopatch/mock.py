@@ -9,15 +9,16 @@ from functools import partial
 from typing import (
     Any,
     Callable,
-    AliasType,
     Hashable,
     List,
     Optional,
     Tuple,
-    ParamSpeck,
+    ParamSpec,
     TypeVar,
+    Generic,
 )
 from unittest.mock import MagicMock, Mock, NonCallableMock, patch
+from typing_extensions import TypeAlias
 
 _Params = ParamSpec("_Params")
 _RType = TypeVar("_RType")
@@ -31,11 +32,26 @@ class _Call:
     output: Any
 
 
-RecordableCallable: AliasType = Callable[[Hashable, ...], Hashable]
+RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
 _record_mode = False
 
 
-class NoMockBase(ABS, Mock):
+def _configure_patch(record: bool):
+    """Configure the patching behavior for the current test session."""
+    global _record_mode
+    _record_mode = record
+
+
+class NoMockBase(ABC, Mock):
+    """Base class for recording and replaying function calls."""
+
+    def __init__(
+        self, target: str, *args, calls: Optional[List[_Call]] = None, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self._target = target
+        self._calls = calls if calls is not None else []
+
     @abstractmethod
     def _execute_mock_call(self, /, *args, **kwargs): ...
 
@@ -51,11 +67,11 @@ class NoMockRecord(NoMockBase):
         calls: Optional[List[_Call]] = None,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
-        self._calls = calls if calls is not None else []
+        super().__init__(target, *args, calls=calls, **kwargs)
+        self.function = function
 
     def _execute_mock_call(self, /, *args, **kwargs):
-        output = self._target(*args, **kwargs)
+        output = self.function(*args, **kwargs)
         self._calls.append(
             _Call(target=self._target, args=args, kwargs=kwargs, output=output)
         )
@@ -66,8 +82,7 @@ class NoMockRecall(NoMockBase):
     """Replay the outputs recorded by a :class:`NoMockRecord` instance."""
 
     def __init__(self, target: str, *args, calls: List[_Call] = None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._calls = calls if calls is not None else []
+        super().__init__(target, *args, calls=calls, **kwargs)
 
     def _execute_mock_call(self, /, *args, **kwargs):
         call = self._calls.pop(0)

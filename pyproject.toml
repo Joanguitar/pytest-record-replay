@@ -9,7 +9,7 @@ description = "Record and recall behavior in pytest tests"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-dependencies = ["pytest>=7"]
+dependencies = ["pytest>=7", "pytest-cov>=4", "typing-extensions>=4"]
 
 [project.entry-points.pytest11]
 "nopatch.pytest_plugin" = "nopatch.pytest_plugin"
@@ -19,3 +19,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "--cov=nopatch",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-report=html:coverage",
+]
