@@ -2,10 +2,15 @@
 
 import importlib
 import inspect
-import dill
-from copy import deepcopy
-from pathlib import Path
 from abc import ABC, abstractmethod
+from collections.abc import (
+    MutableMapping,
+    MutableSequence,
+    MutableSet,
+    Sequence,
+)
+from pathlib import Path
+import dill
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -24,9 +29,7 @@ from unittest.mock import MagicMock, Mock, NonCallableMock, patch
 from typing_extensions import ParamSpec, TypeAlias
 import unittest
 
-_HParams = ParamSpec(
-    "_HParams"
-)
+_HParams = ParamSpec("_HParams")
 _RType = TypeVar("_RType")
 
 
@@ -36,6 +39,55 @@ class _Call:
     args: tuple
     kwargs: dict
     output: Any
+    post_args: Optional[Tuple[Any, ...]] = None
+    post_kwargs: Optional[dict] = None
+
+
+def _can_update(target: Any) -> bool:
+    """Check if the target is a mutable collection that can be updated by _update_mutable_argument."""
+    if isinstance(target, (MutableSequence, MutableMapping, MutableSet)):
+        return True
+    if isinstance(target, Sequence):
+        return all(_can_update(item) for item in target)
+    return False
+
+
+def _for_update(arg: _RType, rarg: _RType) -> Optional[_RType]:
+    """Return the post-call argument for updating mutable arguments."""
+    if type(arg) != type(rarg):
+        raise TypeError(
+            f"Cannot update mutable argument of type {type(arg).__name__} with {type(rarg).__name__}."
+        )
+    if not dill.pickles(arg, exact=True):
+        raise ValueError(f"Argument {arg} is not picklable.")
+    if dill.dumps(arg) == dill.dumps(rarg):
+        return None
+    if _can_update(arg):
+        return dill.copy(rarg)
+    raise TypeError(f"Cannot update mutable argument of type {type(arg).__name__}.")
+
+
+def _update_argument(target: _RType, updated: Optional[_RType]) -> None:
+    """Restore any in-place mutations captured after a recorded call."""
+    if updated is None:
+        return target
+    if type(target) != type(updated):
+        raise TypeError(
+            f"Cannot update mutable argument of type {type(target).__name__} with {type(updated).__name__}."
+        )
+    if isinstance(target, MutableSequence):
+        target.clear()
+        target.extend(updated)
+        return
+    if isinstance(target, (MutableMapping, MutableSet)):
+        target.clear()
+        target.update(updated)
+        return
+    if isinstance(target, Sequence):
+        for target_item, updated_item in zip(target, updated):
+            _update_argument(target_item, updated_item)
+        return
+    raise TypeError(f"Cannot update mutable argument of type {type(target).__name__}.")
 
 
 RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
@@ -77,24 +129,35 @@ class NoMockRecord(NoMockBase):
         self.function = function
 
     def _execute_mock_call(self, /, *args, **kwargs):
+        # Make sure that the arguments and the output are picklable before recording
         for arg in args:
-            if not dill.pickles(arg):
+            if not dill.pickles(arg, exact=True):
                 raise ValueError(f"Argument {arg} is not picklable.")
         for key, value in kwargs.items():
-            if not dill.pickles(value):
+            if not dill.pickles(value, exact=True):
                 raise ValueError(f"Keyword argument {key}={value} is not picklable.")
-        recorded_args = deepcopy(args)
-        recorded_kwargs = deepcopy(kwargs)
+        recorded_args = dill.copy(args)
+        recorded_kwargs = dill.copy(kwargs)
         output = self.function(*args, **kwargs)
-        if not dill.pickles(output):
+        if not dill.pickles(output, exact=True):
             raise ValueError(f"Output {output} is not picklable.")
-        recorded_output = deepcopy(output)
+        recorded_output = dill.copy(output)
+        post_args = tuple(
+            _for_update(arg, recorded_arg)
+            for arg, recorded_arg in zip(args, recorded_args)
+        )
+        post_kwargs = {
+            key: _for_update(value, recorded_kwargs[key])
+            for key, value in kwargs.items()
+        }
         self._calls.append(
             _Call(
                 target=self._target,
                 args=recorded_args,
                 kwargs=recorded_kwargs,
                 output=recorded_output,
+                post_args=post_args,
+                post_kwargs=post_kwargs,
             )
         )
         return output
@@ -116,6 +179,10 @@ class NoMockRecall(NoMockBase):
             raise ValueError(
                 f"Arguments mismatch: expected {call.args} and {call.kwargs}, got {args} and {kwargs}"
             )
+        for arg, post_arg in zip(args, call.post_args):
+            _update_argument(arg, post_arg)
+        for key, value in kwargs.items():
+            _update_argument(value, call.post_kwargs[key])
         return call.output
 
 

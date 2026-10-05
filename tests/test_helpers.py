@@ -1,10 +1,17 @@
 import unittest
+from collections import defaultdict, deque
 from types import SimpleNamespace
 
 import pytest
 
 import nopatch.mock as mock_module
-from nopatch.mock import FunctionWCalls, NoMockRecall, NoMockRecord, _Call
+from nopatch.mock import (
+    FunctionWCalls,
+    NoMockRecall,
+    NoMockRecord,
+    _Call,
+    _update_argument,
+)
 
 
 def identity(value=None):
@@ -80,6 +87,30 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
     assert calls[0].args == (["before call"],)
     assert calls[0].kwargs == {"keyword": {"items": ["before call"]}}
     assert calls[0].output == {"items": ["output"]}
+
+
+def test_update_mutable_argument_handles_additional_mutable_collections():
+    target = {
+        "values": [1, 2],
+        "mapping": defaultdict(list, {"a": [1]}),
+        "set": {1, 2},
+        "bytes": bytearray(b"ab"),
+        "queue": deque([1, 2]),
+        "nested": ([1], {"k": [2]}, bytearray(b"x")),
+    }
+    updated = {
+        "values": [3, 4],
+        "mapping": defaultdict(list, {"b": [5]}),
+        "set": {3, 4},
+        "bytes": bytearray(b"cd"),
+        "queue": deque([3, 4]),
+        "nested": ([5], {"k": [6]}, bytearray(b"y")),
+    }
+
+    for key, value in updated.items():
+        _update_argument(target[key], value)
+
+    assert target == updated
 
 
 def test_function_wrapper_records_call(tmp_path, monkeypatch):
@@ -160,9 +191,9 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
-    wrapper.calls.append(_Call("one", (), {}, "first"))
+    wrapper.calls.append(_Call("one", (), {}, "first", post_args=(), post_kwargs={}))
     wrapper.save("one")
-    wrapper.calls[:] = [_Call("two", (), {}, "second")]
+    wrapper.calls[:] = [_Call("two", (), {}, "second", post_args=(), post_kwargs={})]
     wrapper.save("two")
 
     wrapper._call_recall()
@@ -197,7 +228,9 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
         property(lambda self: tmp_path / "recordings"),
     )
     wrapper = FunctionWCalls(identity)
-    wrapper.calls.append(_Call("identity", ("value",), {}, "value"))
+    wrapper.calls.append(
+        _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
+    )
     wrapper.save("z-last")
     wrapper.save("a-first")
 
@@ -205,7 +238,9 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
 
     wrapper.calls.clear()
     wrapper._load_file(wrapper.files[0])
-    assert wrapper.calls == [_Call("identity", ("value",), {}, "value")]
+    assert wrapper.calls == [
+        _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
+    ]
 
 
 def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
@@ -215,7 +250,14 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
         property(lambda self: tmp_path / "recordings"),
     )
     wrapper = FunctionWCalls(identity)
-    original = _Call("identity", (b"value",), {"tags": {"one", "two"}}, b"result")
+    original = _Call(
+        "identity",
+        (b"value",),
+        {"tags": {"one", "two"}},
+        b"result",
+        post_args=(None,),
+        post_kwargs={"tags": None},
+    )
     wrapper.calls.append(original)
     wrapper.save("typed-values")
 
@@ -267,10 +309,19 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monke
         wrapped = FunctionWCalls(function, record=True, calls=calls)
         decorated = mock_module.nopatch(target)(wrapped)
         assert decorated("item") is None
-        assert calls[0] == _Call(target, ("item",), {}, "result: item")
+        assert calls[0] == _Call(
+            target,
+            ("item",),
+            {},
+            "result: item",
+            post_args=(None,),
+            post_kwargs={},
+        )
         assert len(decorated.files) == 1
     else:
-        calls = [_Call(target, ("item",), {}, "recorded result")]
+        calls = [
+        _Call(target, ("item",), {}, "recorded result", post_args=(None,), post_kwargs={})
+    ]
         wrapped = FunctionWCalls(function, record=False, calls=calls)
         wrapped.save("recorded")
         decorated = mock_module.nopatch(target)(wrapped)
