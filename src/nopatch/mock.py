@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, overload
+from typing import Any, Callable, Generic, List, Literal, Optional, Tuple, TypeVar, overload
 from unittest.mock import Mock, patch
+import warnings
 
 import dill
 from typing_extensions import ParamSpec
@@ -207,8 +208,17 @@ class FunctionWCalls(Generic[_HParams, _RType]):
     def __init__(
         self,
         function: Callable[_HParams, _RType],
-        record: bool = ...,
+        record: Literal[False] = ...,
         calls: Optional[List[_Call]] = ...,
+        file: Optional[Path] = ...,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        function: Callable[_HParams, None],
+        record: Literal[True] = ...,
+        calls: None = ...,
         file: None = ...,
     ): ...
 
@@ -221,6 +231,8 @@ class FunctionWCalls(Generic[_HParams, _RType]):
     ):
         self.func = function
         self.record: bool = record
+        if calls is not None and file is not None:
+            warnings.warn("Both calls and file are provided. Using calls.")
         self.calls: List[_Call] = calls if calls is not None else []
         self.file = file
 
@@ -257,16 +269,14 @@ class FunctionWCalls(Generic[_HParams, _RType]):
         self._load_file(self.file)
         return self._call_recall_calls(*args, **kwargs)
 
-    def _call_recall_files(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> List[_RType]:
+    def _call_recall_files(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> None:
         files = self.files
         assert len(files) > 0, "No recorded calls found."
-        outputs = []
         for ii, file in enumerate(files):
             self._load_file(file)
             if ii > 0:
                 self._TestCaseReset()
-            outputs.append(self._call_recall_calls(*args, **kwargs))
-        return outputs
+            self._call_recall_calls(*args, **kwargs)
 
     def _TestCaseReset(self):
         """Calls tearDown/setUp method if the function is a method of a TestCase."""

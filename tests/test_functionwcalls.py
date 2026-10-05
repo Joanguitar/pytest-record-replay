@@ -144,7 +144,7 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
     outputs = wrapper()
 
-    assert outputs == ["first", "second"]
+    assert outputs == None
     assert [event[1] for event in events if isinstance(event, tuple)] == [
         "first",
         "second",
