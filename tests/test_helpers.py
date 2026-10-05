@@ -97,10 +97,10 @@ def test_update_argument_rejects_wrong_type():
 def test_configure_patch_updates_global_record_mode(monkeypatch):
     monkeypatch.setattr(mock_module, "_record_mode", False)
     _configure_patch(False)
-    assert mock_module._record_mode is False
+    assert mock_module._recording is False
 
     _configure_patch(True)
-    assert mock_module._record_mode is True
+    assert mock_module._recording is True
 
 
 def test_package_attribute_lookup_reports_missing_names():
@@ -132,7 +132,7 @@ def test_pytest_plugin_hooks_configure_record_mode():
 
     assert options[0][0] == ("--record",)
     assert options[0][1]["action"] == "store_true"
-    assert mock_module._record_mode is True
+    assert mock_module._recording is True
 
 
 def test_pytest_recording_fixture_reads_option():

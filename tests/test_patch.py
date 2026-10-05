@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from nopatch import recording
 import nopatch.mock as mock_module
 from nopatch.mock import FunctionWCalls
 
@@ -20,7 +21,7 @@ class MethodDependency:
 
 
 def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):
-    monkeypatch.setattr(mock_module, "_record_mode", True)
+    monkeypatch.setattr(mock_module, "_recording", True)
 
     default_wrapper = mock_module.nodecorator()(identity)
     explicit_wrapper = mock_module.nodecorator(record=False)(identity)
@@ -28,6 +29,19 @@ def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):
     assert default_wrapper.record is True
     assert explicit_wrapper.record is False
     assert default_wrapper.__name__ == "identity"
+
+
+def test_nodecorator_patches_imported_and_module_recording_references(monkeypatch):
+    monkeypatch.setattr(mock_module, "_recording", False)
+
+    def observe_recording():
+        return recording(), mock_module.recording()
+
+    wrapper = mock_module.nodecorator(record=True)(observe_recording)
+
+    assert wrapper.func() == (True, True)
+    assert recording() is False
+    assert mock_module.recording() is False
 
 
 def test_nodecorator_rejects_an_already_wrapped_function():

@@ -1,38 +1,35 @@
 """Callable recording and replay primitives."""
 
-import importlib
 import inspect
+import unittest
 from abc import ABC, abstractmethod
-from collections.abc import (
-    MutableMapping,
-    MutableSequence,
-    MutableSet,
-    Sequence,
-)
-from pathlib import Path
-import dill
+from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 from functools import wraps
-from typing import (
-    Any,
-    Callable,
-    Hashable,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-    Generic,
-)
-from unittest.mock import MagicMock, Mock, NonCallableMock, patch
+from pathlib import Path
+from typing import Any, Callable, Generic, Hashable, List, Optional, Tuple, TypeVar
+from unittest.mock import Mock, patch
+
+import dill
 from typing_extensions import ParamSpec, TypeAlias
-import unittest
 
 _HParams = ParamSpec("_HParams")
 _RType = TypeVar("_RType")
+RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
 
+_recording = False
 timestamp = datetime.now().isoformat()
+
+
+def recording() -> bool:
+    return _recording
+
+
+def _configure_patch(record: bool):
+    """Configure the patching behavior for the current test session."""
+    global _recording
+    _recording = record
 
 
 @dataclass(frozen=True)
@@ -90,16 +87,6 @@ def _update_argument(target: _RType, updated: Optional[_RType]) -> None:
             _update_argument(target_item, updated_item)
         return
     raise TypeError(f"Cannot update mutable argument of type {type(target).__name__}.")
-
-
-RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
-_record_mode = False
-
-
-def _configure_patch(record: bool):
-    """Configure the patching behavior for the current test session."""
-    global _record_mode
-    _record_mode = record
 
 
 class NoMockBase(ABC, Mock):
@@ -282,14 +269,16 @@ def nodecorator(
 ) -> Callable[[Callable[_HParams, None]], FunctionWCalls[_HParams]]:
     """Return the function without any decoration."""
     if record is None:
-        record = _record_mode
+        record = _recording
+
+    patch_recording = patch(f"{__name__}.recording", Mock(return_value=record))
 
     def wrapper(func: Callable[_HParams, None]) -> FunctionWCalls[_HParams]:
         if isinstance(func, FunctionWCalls):
             raise ValueError(
                 "@nodecorator should be applied before any @nopatch decorator."
             )
-        return wraps(func)(FunctionWCalls(func, record=record))
+        return wraps(func)(FunctionWCalls(patch_recording(func), record=record))
 
     return wrapper
 
@@ -299,16 +288,19 @@ def nopatch(target: str):
         if hasattr(func, "function_with_calls") and isinstance(
             func.function_with_calls, FunctionWCalls
         ):
-            func, function_with_calls = func.function_with_calls, func.function_with_calls
+            function_with_calls: FunctionWCalls = func.function_with_calls
+            func = function_with_calls.func
         else:
             function_with_calls = nodecorator()(func)
         calls = function_with_calls.calls
         record = function_with_calls.record
         if function_with_calls.record:
             patched_func, _ = patch(target).get_original()
-            _func = patch(target, NoMockRecord(target, patched_func, calls=calls))(function_with_calls)
+            _func = patch(target, NoMockRecord(target, patched_func, calls=calls))(func)
         else:
-            _func = patch(target, NoMockRecall(target, calls=calls))(function_with_calls)
+            _func = patch(target, NoMockRecall(target, calls=calls))(func)
+
+        function_with_calls = FunctionWCalls(_func, record=record, calls=calls)
 
         @wraps(func)
         def patched_function(*args: _HParams.args, **kwargs: _HParams.kwargs):
