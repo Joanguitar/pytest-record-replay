@@ -4,7 +4,14 @@ from importlib import import_module
 
 __version__ = "0.0.1"
 
-__all__ = ["NoMockBase", "NoMockRecord", "NoMockRecall", "nopatch", "nodecorator", "recording"]
+__all__ = [
+    "NoMockBase",
+    "NoMockRecord",
+    "NoMockRecall",
+    "nopatch",
+    "nodecorator",
+    "recording",
+]
 
 
 def __getattr__(name):

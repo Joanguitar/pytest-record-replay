@@ -1,9 +1,7 @@
-from types import SimpleNamespace
-
 import pytest
 
-from nopatch import recording
 import nopatch.mock as mock_module
+from nopatch import recording
 from nopatch.mock import FunctionWCalls
 
 
@@ -26,12 +24,12 @@ def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):
     default_wrapper = mock_module.nodecorator()(identity)
     explicit_wrapper = mock_module.nodecorator(record=False)(identity)
 
-    assert default_wrapper.record is True
-    assert explicit_wrapper.record is False
+    assert default_wrapper.function_with_calls.record is True
+    assert explicit_wrapper.function_with_calls.record is False
     assert default_wrapper.__name__ == "identity"
 
 
-def test_nodecorator_patches_imported_and_module_recording_references(monkeypatch):
+def test_nodecorator_patches_module_recording_reference_only(monkeypatch):
     monkeypatch.setattr(mock_module, "_recording", False)
 
     def observe_recording():
@@ -39,29 +37,29 @@ def test_nodecorator_patches_imported_and_module_recording_references(monkeypatc
 
     wrapper = mock_module.nodecorator(record=True)(observe_recording)
 
-    assert wrapper.func() == (True, True)
+    assert wrapper.function_with_calls.func() == (False, True)
     assert recording() is False
     assert mock_module.recording() is False
 
 
 def test_nodecorator_rejects_an_already_wrapped_function():
-    wrapped = FunctionWCalls(identity)
+    wrapped = mock_module.nodecorator()(identity)
 
     with pytest.raises(ValueError, match="should be applied before"):
         mock_module.nodecorator()(wrapped)
 
 
 def test_nopatch_wraps_a_plain_function(monkeypatch):
-    monkeypatch.setattr(mock_module, "_record_mode", False)
+    monkeypatch.setattr(mock_module, "_recording", False)
     decorated = mock_module.nopatch(f"{__name__}.dependency")(identity)
 
     assert callable(decorated)
     assert decorated.function_with_calls.func is not identity
-    assert decorated.record is False
+    assert decorated.function_with_calls.record is False
 
 
 def test_nopatch_records_bound_method_without_receiver(tmp_path, monkeypatch):
-    monkeypatch.setattr(mock_module, "_record_mode", True)
+    monkeypatch.setattr(mock_module, "_recording", True)
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
@@ -75,8 +73,9 @@ def test_nopatch_records_bound_method_without_receiver(tmp_path, monkeypatch):
         return instance.value(item)
 
     assert call_method("item") is None
-    assert call_method.calls[0].args == ("item",)
-    assert call_method.calls[0].output == "method: item"
+    calls = call_method.function_with_calls.calls
+    assert calls[0].args == ("item",)
+    assert calls[0].output == "method: item"
 
 
 def test_mock_descriptor_supports_class_access_and_replay_binding():
@@ -107,20 +106,11 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monke
     )
     target = f"{__name__}.dependency"
     function = lambda value: dependency(value)
+    wrapped = mock_module.nodecorator(record=record)(function)
+    calls = wrapped.function_with_calls.calls
 
-    if record:
-        calls = []
-        wrapped = FunctionWCalls(function, record=True, calls=calls)
-        decorated = mock_module.nopatch(target)(wrapped)
-        assert decorated("item") is None
-        assert decorated.function_with_calls.files
-        assert calls[0].target == target
-        assert calls[0].args == ("item",)
-        assert calls[0].kwargs == {}
-        assert calls[0].output == "result: item"
-        assert len(decorated.function_with_calls.files) == 1
-    else:
-        calls = [
+    if not record:
+        calls.append(
             mock_module._Call(
                 target,
                 ("item",),
@@ -129,9 +119,18 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monke
                 post_args=(None,),
                 post_kwargs={},
             )
-        ]
-        wrapped = FunctionWCalls(function, record=False, calls=calls)
-        wrapped.save("recorded")
-        decorated = mock_module.nopatch(target)(wrapped)
-        assert decorated("item") is None
-        assert decorated.calls == []
+        )
+        wrapped.function_with_calls.save("recorded")
+
+    decorated = mock_module.nopatch(target)(wrapped)
+    assert decorated("item") is None
+
+    if record:
+        assert decorated.function_with_calls.files
+        assert calls[0].target == target
+        assert calls[0].args == ("item",)
+        assert calls[0].kwargs == {}
+        assert calls[0].output == "result: item"
+        assert len(decorated.function_with_calls.files) == 1
+    else:
+        assert decorated.function_with_calls.calls == []

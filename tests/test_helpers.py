@@ -1,4 +1,3 @@
-import unittest
 from collections import defaultdict, deque
 from types import SimpleNamespace
 
@@ -94,8 +93,7 @@ def test_update_argument_rejects_wrong_type():
         _update_argument(range(3), range(1, 4))
 
 
-def test_configure_patch_updates_global_record_mode(monkeypatch):
-    monkeypatch.setattr(mock_module, "_record_mode", False)
+def test_configure_patch_updates_global_record_mode():
     _configure_patch(False)
     assert mock_module._recording is False
 
@@ -110,6 +108,7 @@ def test_package_attribute_lookup_reports_missing_names():
         "NoMockRecall",
         "nopatch",
         "nodecorator",
+        "recording",
     ]
     assert nopatch.__getattr__("NoMockRecord") is mock_module.NoMockRecord
     with pytest.raises(AttributeError, match="has no attribute"):

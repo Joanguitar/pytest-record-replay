@@ -19,7 +19,7 @@ _RType = TypeVar("_RType")
 RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
 
 _recording = False
-timestamp = datetime.now().isoformat()
+timestamp = datetime.now().isoformat().replace(":", "-")
 
 
 def recording() -> bool:
@@ -266,32 +266,43 @@ class FunctionWCalls(Generic[_HParams]):
 
 def nodecorator(
     record: Optional[bool] = None,
-) -> Callable[[Callable[_HParams, None]], FunctionWCalls[_HParams]]:
+) -> Callable[[Callable[_HParams, None]], Callable[_HParams, None]]:
     """Return the function without any decoration."""
     if record is None:
         record = _recording
 
     patch_recording = patch(f"{__name__}.recording", Mock(return_value=record))
 
-    def wrapper(func: Callable[_HParams, None]) -> FunctionWCalls[_HParams]:
-        if isinstance(func, FunctionWCalls):
+    def wrapper(func: Callable[_HParams, None]) -> Callable[_HParams, None]:
+        if hasattr(func, "function_with_calls") and isinstance(
+            func.function_with_calls, FunctionWCalls
+        ):
             raise ValueError(
                 "@nodecorator should be applied before any @nopatch decorator."
             )
-        return wraps(func)(FunctionWCalls(patch_recording(func), record=record))
+        function_with_calls = wraps(func)(
+            FunctionWCalls(patch_recording(func), record=record)
+        )
+
+        @wraps(func)
+        def patched_function(*args: _HParams.args, **kwargs: _HParams.kwargs):
+            return function_with_calls(*args, **kwargs)
+
+        patched_function.function_with_calls = function_with_calls
+        return patched_function
 
     return wrapper
 
 
 def nopatch(target: str):
     def wrapper(func: Callable[_HParams, None]) -> Callable[_HParams, None]:
-        if hasattr(func, "function_with_calls") and isinstance(
-            func.function_with_calls, FunctionWCalls
+        if not (
+            hasattr(func, "function_with_calls")
+            and isinstance(func.function_with_calls, FunctionWCalls)
         ):
-            function_with_calls: FunctionWCalls = func.function_with_calls
-            func = function_with_calls.func
-        else:
-            function_with_calls = nodecorator()(func)
+            func = nodecorator()(func)
+        function_with_calls: FunctionWCalls = func.function_with_calls
+        func = function_with_calls.func
         calls = function_with_calls.calls
         record = function_with_calls.record
         if function_with_calls.record:

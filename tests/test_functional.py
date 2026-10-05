@@ -6,6 +6,7 @@ run_count = {
     "describe": 0,
 }
 
+
 def multiply(value):
     run_count["multiply"] += 1
     return value * 2
@@ -28,6 +29,7 @@ def test_description_is_recorded():
     run_count_old = run_count.copy()
     assert describe("sample") == {"name": "sample", "active": True}
     assert run_count["describe"] == run_count_old["describe"] + recording()
+
 
 @nopatch(f"{__name__}.multiply")
 @nopatch(f"{__name__}.describe")

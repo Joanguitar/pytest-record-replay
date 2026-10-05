@@ -4,6 +4,10 @@ import nopatch.mock as mock_module
 from nopatch.mock import FunctionWCalls, NoMockRecall, NoMockRecord, _Call
 
 
+def test_timestamp_is_safe_for_windows_paths():
+    assert not any(char in mock_module.timestamp for char in '<>:"/\\|?*')
+
+
 def identity(value=None):
     return value
 
