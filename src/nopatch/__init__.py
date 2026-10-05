@@ -4,7 +4,7 @@ from importlib import import_module
 
 __version__ = "0.0.1"
 
-__all__ = ["NoMockRecord", "NoMockRecall", "nopatch", "nodecorator"]
+__all__ = ["NoMockBase", "NoMockRecord", "NoMockRecall", "nopatch", "nodecorator"]
 
 
 def __getattr__(name):

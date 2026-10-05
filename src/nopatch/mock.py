@@ -32,6 +32,8 @@ import unittest
 _HParams = ParamSpec("_HParams")
 _RType = TypeVar("_RType")
 
+timestamp = datetime.now().isoformat()
+
 
 @dataclass(frozen=True)
 class _Call:
@@ -109,6 +111,14 @@ class NoMockBase(ABC, Mock):
         super().__init__(*args, **kwargs)
         self._target = target
         self._calls = calls if calls is not None else []
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        if isinstance(self, NoMockRecord):
+            function = self.function.__get__(instance, owner)
+            return NoMockRecord(self._target, function, calls=self._calls)
+        return NoMockRecall(self._target, calls=self._calls)
 
     @abstractmethod
     def _execute_mock_call(self, /, *args, **kwargs): ...
@@ -209,7 +219,7 @@ class FunctionWCalls(Generic[_HParams]):
         assert len(self.calls) == 0, "Calls should be empty before recording."
         self.calls.clear()
         self.func(*args, **kwargs)
-        self.save(datetime.now().isoformat())
+        self.save(timestamp)
 
     def _call_recall(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
         files = self.files
@@ -234,12 +244,13 @@ class FunctionWCalls(Generic[_HParams]):
     @property
     def path(self) -> Path:
         """Return a file unique to the function."""
-        path = Path(inspect.getfile(self.func))
+        function = inspect.unwrap(self.func)
+        path = Path(inspect.getfile(function))
         path = path.parent / "resources_nopatch" / path.stem
         # If the function is a method, include the class name in the file path
-        if inspect.ismethod(self.func):
-            path = path / self.func.__self__.__class__.__name__
-        path = path / self.func.__name__
+        if inspect.ismethod(function):
+            path = path / function.__self__.__class__.__name__
+        path = path / function.__name__
         return path
 
     @property
@@ -284,17 +295,26 @@ def nodecorator(
 
 
 def nopatch(target: str):
-    def wrapper(func: FunctionWCalls[_HParams]) -> FunctionWCalls[_HParams]:
-        if not isinstance(func, FunctionWCalls):
-            func = nodecorator()(func)
-        calls = func.calls
-        if func.record:
-            patched_func, _ = patch(target).get_original()
-            _func = patch(target, NoMockRecord(target, patched_func, calls=calls))(
-                func.func
-            )
+    def wrapper(func: Callable[_HParams, None]) -> Callable[_HParams, None]:
+        if hasattr(func, "function_with_calls") and isinstance(
+            func.function_with_calls, FunctionWCalls
+        ):
+            func, function_with_calls = func.function_with_calls, func.function_with_calls
         else:
-            _func = patch(target, NoMockRecall(target, calls=calls))(func.func)
-        return FunctionWCalls(_func, record=func.record, calls=calls)
+            function_with_calls = nodecorator()(func)
+        calls = function_with_calls.calls
+        record = function_with_calls.record
+        if function_with_calls.record:
+            patched_func, _ = patch(target).get_original()
+            _func = patch(target, NoMockRecord(target, patched_func, calls=calls))(function_with_calls)
+        else:
+            _func = patch(target, NoMockRecall(target, calls=calls))(function_with_calls)
+
+        @wraps(func)
+        def patched_function(*args: _HParams.args, **kwargs: _HParams.kwargs):
+            return function_with_calls(*args, **kwargs)
+
+        patched_function.function_with_calls = function_with_calls
+        return patched_function
 
     return wrapper

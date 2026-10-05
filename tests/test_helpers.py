@@ -104,7 +104,13 @@ def test_configure_patch_updates_global_record_mode(monkeypatch):
 
 
 def test_package_attribute_lookup_reports_missing_names():
-    assert nopatch.__all__ == ["NoMockRecord", "NoMockRecall", "nopatch", "nodecorator"]
+    assert nopatch.__all__ == [
+        "NoMockBase",
+        "NoMockRecord",
+        "NoMockRecall",
+        "nopatch",
+        "nodecorator",
+    ]
     assert nopatch.__getattr__("NoMockRecord") is mock_module.NoMockRecord
     with pytest.raises(AttributeError, match="has no attribute"):
         nopatch.__getattr__("missing")
