@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import nopatch
 import nopatch.mock as mock_module
 from nopatch.mock import (
     _Call,
@@ -61,6 +62,38 @@ def test_update_argument_handles_additional_mutable_collections():
     assert target == updated
 
 
+def test_for_update_handles_invalid_and_unhandled_mutables():
+    with pytest.raises(TypeError, match="Cannot update mutable argument"):
+        _for_update([1, 2], {"a": 1})
+
+    with pytest.raises(ValueError, match="not picklable"):
+        _for_update((item for item in ()), (item for item in ()))
+
+    with pytest.raises(TypeError, match="Cannot update mutable argument"):
+        _for_update("abc", "abd")
+
+
+def test_update_argument_handles_none_and_nested_sequences():
+    target = [1, 2]
+    assert _update_argument(target, None) is target
+
+    target = ([1, 2], {"a": [3]})
+    updated = ([9], {"a": [4]})
+    _update_argument(target, updated)
+    assert target == updated
+
+    with pytest.raises(TypeError, match="Cannot update mutable argument"):
+        _update_argument([1, 2], {"a": 1})
+
+
+def test_update_argument_rejects_wrong_type():
+    with pytest.raises(TypeError, match="Cannot update mutable argument"):
+        _update_argument("abc", "abd")
+
+    with pytest.raises(TypeError, match="Cannot update mutable argument"):
+        _update_argument(range(3), range(1, 4))
+
+
 def test_configure_patch_updates_global_record_mode(monkeypatch):
     monkeypatch.setattr(mock_module, "_record_mode", False)
     _configure_patch(False)
@@ -68,6 +101,13 @@ def test_configure_patch_updates_global_record_mode(monkeypatch):
 
     _configure_patch(True)
     assert mock_module._record_mode is True
+
+
+def test_package_attribute_lookup_reports_missing_names():
+    assert nopatch.__all__ == ["NoMockRecord", "NoMockRecall", "nopatch", "nodecorator"]
+    assert nopatch.__getattr__("NoMockRecord") is mock_module.NoMockRecord
+    with pytest.raises(AttributeError, match="has no attribute"):
+        nopatch.__getattr__("missing")
 
 
 def test_pytest_plugin_hooks_configure_record_mode():

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nopatch"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Record and recall behavior in pytest tests"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -22,13 +22,16 @@ test = ["pytest-cov>=4"]
 [project.entry-points.pytest11]
 "nopatch.pytest_plugin" = "nopatch.pytest_plugin"
 
+[tool.setuptools.dynamic]
+version = { attr = "nopatch.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-    "--cov=nopatch",
+    "--cov=nopatch.mock",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-report=html:coverage",

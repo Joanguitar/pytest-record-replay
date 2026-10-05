@@ -83,7 +83,7 @@ def _update_argument(target: _RType, updated: Optional[_RType]) -> None:
         target.clear()
         target.update(updated)
         return
-    if isinstance(target, Sequence):
+    if isinstance(target, Sequence) and not isinstance(target, (str, bytes, bytearray)):
         for target_item, updated_item in zip(target, updated):
             _update_argument(target_item, updated_item)
         return

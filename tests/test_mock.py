@@ -76,3 +76,11 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
     assert calls[0].args == (["before call"],)
     assert calls[0].kwargs == {"keyword": {"items": ["before call"]}}
     assert calls[0].output == {"items": ["output"]}
+
+
+def test_recall_wrong_target_raises_value_error():
+    calls = []
+    NoMockRecord("dependency", dependency, calls=calls)(value="expected")
+
+    with pytest.raises(ValueError, match="Target mismatch"):
+        NoMockRecall("different_target", calls=calls)(value="expected")
