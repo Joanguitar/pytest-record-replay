@@ -5,12 +5,17 @@ from nopatch import recording
 from nopatch.mock import FunctionWCalls
 
 
-def identity(value=None):
-    return value
+def identity(value=None) -> None:
+    return None
 
 
 def dependency(value):
     return f"result: {value}"
+
+
+def try_raise(error: Exception) -> None:
+    if isinstance(error, Exception):
+        raise error
 
 
 class MethodDependency:
@@ -21,23 +26,25 @@ class MethodDependency:
 def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):
     monkeypatch.setattr(mock_module, "_recording", True)
 
-    default_wrapper = mock_module.nodecorator()(identity)
-    explicit_wrapper = mock_module.nodecorator(record=False)(identity)
+    default_wrapper = mock_module.nodecorator()(try_raise)
+    explicit_wrapper = mock_module.nodecorator(record=False)(try_raise)
 
     assert default_wrapper.function_with_calls.record is True
     assert explicit_wrapper.function_with_calls.record is False
-    assert default_wrapper.__name__ == "identity"
+    assert default_wrapper.__name__ == "try_raise"
 
 
 def test_nodecorator_patches_module_recording_reference_only(monkeypatch):
     monkeypatch.setattr(mock_module, "_recording", False)
+    observed_recording = []
 
-    def observe_recording():
-        return recording(), mock_module.recording()
+    def observe_recording() -> None:
+        observed_recording.append((recording(), mock_module.recording()))
 
     wrapper = mock_module.nodecorator(record=True)(observe_recording)
 
-    assert wrapper.function_with_calls.func() == (False, True)
+    assert wrapper.function_with_calls.func() is None
+    assert observed_recording == [(False, True)]
     assert recording() is False
     assert mock_module.recording() is False
 
@@ -69,8 +76,8 @@ def test_nopatch_records_bound_method_without_receiver(tmp_path, monkeypatch):
     instance = MethodDependency()
 
     @mock_module.nopatch(target)
-    def call_method(item):
-        return instance.value(item)
+    def call_method(item) -> None:
+        instance.value(item)
 
     assert call_method("item") is None
     calls = call_method.function_with_calls.calls
@@ -105,7 +112,10 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monke
         property(lambda self: tmp_path / "recordings"),
     )
     target = f"{__name__}.dependency"
-    function = lambda value: dependency(value)
+
+    def function(value) -> None:
+        dependency(value)
+
     wrapped = mock_module.nodecorator(record=record)(function)
     calls = wrapped.function_with_calls.calls
 

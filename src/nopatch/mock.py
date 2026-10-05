@@ -8,15 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Generic, Hashable, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, overload
 from unittest.mock import Mock, patch
 
 import dill
-from typing_extensions import ParamSpec, TypeAlias
+from typing_extensions import ParamSpec
 
 _HParams = ParamSpec("_HParams")
 _RType = TypeVar("_RType")
-RecordableCallable: TypeAlias = Callable[[Hashable, ...], Hashable]
 
 _recording = False
 timestamp = datetime.now().isoformat().replace(":", "-")
@@ -183,42 +182,91 @@ class NoMockRecall(NoMockBase):
         return call.output
 
 
-class FunctionWCalls(Generic[_HParams]):
+class FunctionWCalls(Generic[_HParams, _RType]):
     """Wrap a test function to have calls attribute."""
+
+    @overload
+    def __init__(
+        self,
+        function: Callable[_HParams, _RType],
+        record: bool = ...,
+        calls: Optional[List[_Call]] = ...,
+        file: Path = ...,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        function: Callable[_HParams, _RType],
+        record: bool = ...,
+        calls: List[_Call] = ...,
+        file: Optional[Path] = ...,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        function: Callable[_HParams, _RType],
+        record: bool = ...,
+        calls: Optional[List[_Call]] = ...,
+        file: None = ...,
+    ): ...
 
     def __init__(
         self,
-        function: Callable[_HParams, None],
+        function: Callable[_HParams, _RType],
         record: bool = False,
         calls: Optional[List[_Call]] = None,
+        file: Optional[Path] = None,
     ):
         self.func = function
-        self.calls: List[_Call] = calls if calls is not None else []
         self.record: bool = record
+        self.calls: List[_Call] = calls if calls is not None else []
+        self.file = file
 
-    def __call__(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> None:
+    def __call__(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
         if self.record:
-            self._call_record(*args, **kwargs)
+            return self._call_record(*args, **kwargs)
         else:
-            self._call_recall(*args, **kwargs)
+            return self._call_recall(*args, **kwargs)
 
-    def _call_record(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
+    def _call_record(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
         assert len(self.calls) == 0, "Calls should be empty before recording."
-        self.calls.clear()
-        self.func(*args, **kwargs)
-        self.save(timestamp)
+        output = self.func(*args, **kwargs)
+        if self.file is None:
+            self.save(timestamp)
+        else:
+            self._save_file(self.file)
+        return output
 
     def _call_recall(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
+        if len(self.calls) > 0:
+            return self._call_recall_calls(*args, **kwargs)
+        if self.file is not None:
+            return self._call_recall_file(*args, **kwargs)
+        return self._call_recall_files(*args, **kwargs)
+
+    def _call_recall_calls(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
+        output = self.func(*args, **kwargs)
+        assert len(self.calls) == 0, (
+            f"Unconsumed calls remain after replaying {self.calls}."
+        )
+        return output
+
+    def _call_recall_file(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
+        self._load_file(self.file)
+        return self._call_recall_calls(*args, **kwargs)
+
+    def _call_recall_files(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> List[_RType]:
         files = self.files
         assert len(files) > 0, "No recorded calls found."
+        outputs = []
         for ii, file in enumerate(files):
             self._load_file(file)
             if ii > 0:
                 self._TestCaseReset()
-            self.func(*args, **kwargs)
-            assert len(self.calls) == 0, (
-                f"Unconsumed calls remain after replaying {file}."
-            )
+            outputs.append(self._call_recall_calls(*args, **kwargs))
+        return outputs
 
     def _TestCaseReset(self):
         """Calls tearDown/setUp method if the function is a method of a TestCase."""
@@ -247,6 +295,7 @@ class FunctionWCalls(Generic[_HParams]):
 
     def _save_file(self, file: Path):
         """Save the calls to a file."""
+        self.path.mkdir(parents=True, exist_ok=True)
         with open(file, "wb") as f:
             dill.dump(self.calls, f)
 
@@ -259,7 +308,6 @@ class FunctionWCalls(Generic[_HParams]):
 
     def save(self, name: str):
         """Save the calls to a file."""
-        self.path.mkdir(parents=True, exist_ok=True)
         file = self.path / (name + ".pkl")
         self._save_file(file)
 

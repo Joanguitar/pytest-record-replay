@@ -24,7 +24,7 @@ def test_function_wrapper_records_call(tmp_path, monkeypatch):
     )
     wrapper = FunctionWCalls(identity, record=True)
 
-    assert wrapper("value") is None
+    assert wrapper("value") == "value"
     assert wrapper.record is True
     assert wrapper.calls == []
     assert len(wrapper.files) == 1
@@ -37,6 +37,39 @@ def test_function_wrapper_uses_provided_calls():
 
     assert wrapper.calls is calls
     assert wrapper.record is True
+
+
+def test_function_wrapper_records_and_recalls_from_explicit_file(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        FunctionWCalls,
+        "path",
+        property(lambda self: tmp_path / "recordings"),
+    )
+    file = tmp_path / "recordings" / "explicit.pkl"
+    recorded_calls = []
+    recorder = FunctionWCalls(
+        lambda value: NoMockRecord(
+            "dependency", dependency, calls=recorded_calls
+        )(value),
+        record=True,
+        calls=recorded_calls,
+        file=file,
+    )
+
+    assert recorder("value") == "result: value"
+    assert file.is_file()
+
+    replayed_calls = []
+    replayer = FunctionWCalls(
+        lambda value: NoMockRecall("dependency", calls=replayed_calls)(value),
+        calls=replayed_calls,
+        file=file,
+    )
+
+    assert replayer("value") == "result: value"
+    assert replayed_calls == []
 
 
 def test_call_record_requires_empty_calls():
@@ -58,7 +91,7 @@ def test_call_record_saves_calls(tmp_path, monkeypatch):
     )
     wrapper = FunctionWCalls(identity)
 
-    wrapper._call_record("recorded")
+    assert wrapper._call_record("recorded") == "recorded"
 
     assert wrapper.calls == []
     assert len(wrapper.files) == 1
@@ -94,6 +127,7 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
             call = wrapper.calls[0]
             output = NoMockRecall(call.target, calls=wrapper.calls)()
             events.append((self._testMethodName, output))
+            return output
 
     case = Case("run_case")
     wrapper = FunctionWCalls(case.run_case)
@@ -106,9 +140,11 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
     wrapper.save("one")
     wrapper.calls[:] = [_Call("two", (), {}, "second", post_args=(), post_kwargs={})]
     wrapper.save("two")
+    wrapper.calls.clear()
 
-    wrapper._call_recall()
+    outputs = wrapper()
 
+    assert outputs == ["first", "second"]
     assert [event[1] for event in events if isinstance(event, tuple)] == [
         "first",
         "second",
