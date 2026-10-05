@@ -47,7 +47,7 @@ def _can_update(target: Any) -> bool:
     """Check if the target is a mutable collection that can be updated by _update_mutable_argument."""
     if isinstance(target, (MutableSequence, MutableMapping, MutableSet)):
         return True
-    if isinstance(target, Sequence):
+    if isinstance(target, Sequence) and not isinstance(target, (str, bytes, bytearray)):
         return all(_can_update(item) for item in target)
     return False
 
