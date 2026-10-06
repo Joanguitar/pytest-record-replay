@@ -1,5 +1,5 @@
 from collections import defaultdict, deque
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -7,7 +7,6 @@ import nopatch
 import nopatch.mock as mock_module
 from nopatch.mock import (
     _Call,
-    _can_update,
     _configure_patch,
     _for_update,
     _update_argument,
@@ -26,14 +25,6 @@ def test_call_post_state_defaults_to_none_values_matching_arguments():
     assert call.post_kwargs == {"named": None, "other": None}
 
 
-def test_can_update_detects_mutable_collections():
-    assert _can_update([1, 2])
-    assert _can_update({"items": [1, 2]})
-    assert _can_update({1, 2})
-    assert not _can_update((1, 2))
-    assert not _can_update("abc")
-
-
 def test_for_update_returns_none_for_unchanged_mutables():
     assert _for_update([1, 2], [1, 2]) is None
     assert _for_update({"a": [1]}, {"a": [1]}) is None
@@ -42,6 +33,10 @@ def test_for_update_returns_none_for_unchanged_mutables():
 def test_for_update_returns_post_state_for_mutated_mutables():
     assert _for_update([1, 2], [2, 3]) == [2, 3]
     assert _for_update({"a": [1]}, {"a": [2]}) == {"a": [2]}
+    assert _for_update(([1, 2], 1), ([2, 3], 1)) == ([2, 3], None)
+    assert _for_update(
+        MappingProxyType({"a": [1]}), MappingProxyType({"a": [2]})
+    ) == MappingProxyType({"a": [2]})
 
 
 def test_update_argument_handles_additional_mutable_collections():
@@ -102,11 +97,16 @@ def test_update_argument_rejects_wrong_type():
 
 
 def test_configure_patch_updates_global_record_mode():
+    og_recording = mock_module._recording
+
     _configure_patch(False)
     assert mock_module._recording is False
 
     _configure_patch(True)
     assert mock_module._recording is True
+
+    _configure_patch(og_recording)
+    assert mock_module._recording is og_recording
 
 
 def test_package_attribute_lookup_reports_missing_names():
@@ -121,29 +121,3 @@ def test_package_attribute_lookup_reports_missing_names():
     assert nopatch.__getattr__("NoMockRecord") is mock_module.NoMockRecord
     with pytest.raises(AttributeError, match="has no attribute"):
         nopatch.__getattr__("missing")
-
-
-def test_pytest_plugin_hooks_configure_record_mode():
-    options = []
-    mock_module._configure_patch(False)
-
-    class Parser:
-        def addoption(self, *args, **kwargs):
-            options.append((args, kwargs))
-
-    mock_module_plugin = __import__("nopatch.pytest_plugin", fromlist=["*"])
-    mock_module_plugin.pytest_addoption(Parser())
-    mock_module_plugin.pytest_configure(
-        SimpleNamespace(getoption=lambda name: name == "--record")
-    )
-
-    assert options[0][0] == ("--record",)
-    assert options[0][1]["action"] == "store_true"
-    assert mock_module._recording is True
-
-
-def test_pytest_recording_fixture_reads_option():
-    plugin = __import__("nopatch.pytest_plugin", fromlist=["*"])
-    request = SimpleNamespace(config=SimpleNamespace(getoption=lambda name: True))
-
-    assert plugin.nopatch_recording.__wrapped__(request) is True

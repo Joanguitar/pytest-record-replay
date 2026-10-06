@@ -1,7 +1,17 @@
+from contextlib import contextmanager
 import unittest
+from unittest.mock import patch
+
+import pytest
 
 import nopatch.mock as mock_module
-from nopatch.mock import FunctionWCalls, NoMockRecall, NoMockRecord, _Call
+from nopatch.mock import (
+    FunctionWCalls,
+    NoMockRecall,
+    NoMockRecord,
+    _Call,
+    nopatchermock,
+)
 
 
 def test_timestamp_is_safe_for_windows_paths():
@@ -16,65 +26,128 @@ def dependency(value):
     return f"result: {value}"
 
 
-def test_function_wrapper_records_call(tmp_path, monkeypatch):
+def call_funcs(value):
+    identity_output = identity(value)
+    dependency_output = dependency(value)
+    if identity_output != value or dependency_output != f"result: {value}":
+        raise ValueError
+    return value
+
+
+def identity_calls(value):
+    return [_Call(f"{__name__}.identity", (value,), {}, value)]
+
+
+def dependency_calls(value):
+    return [_Call(f"{__name__}.dependency", (value,), {}, f"result: {value}")]
+
+
+def call_funcs_calls(value):
+    return identity_calls(value) + dependency_calls(value)
+
+
+def patch_identity(funcwcalls: FunctionWCalls):
+    return patch(
+        f"{__name__}.identity", nopatchermock(f"{__name__}.identity", funcwcalls)
+    )
+
+
+def patch_dependency(funcwcalls: FunctionWCalls):
+    return patch(
+        f"{__name__}.dependency", nopatchermock(f"{__name__}.dependency", funcwcalls)
+    )
+
+
+@contextmanager
+def patch_both(funcwcalls: FunctionWCalls):
+    with patch_identity(funcwcalls), patch_dependency(funcwcalls):
+        yield
+
+
+@pytest.mark.parametrize(
+    "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
+)
+def test_function_wrapper_records_call(tmp_path, monkeypatch, value):
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
-    wrapper = FunctionWCalls(identity, record=True)
+    funcwcalls = FunctionWCalls(call_funcs, record=True)
 
-    assert wrapper("value") == "value"
-    assert wrapper.record is True
-    assert wrapper.calls == []
-    assert len(wrapper.files) == 1
+    with patch_identity(funcwcalls):
+        assert funcwcalls(value) == value
+        assert funcwcalls.record is True
+        assert funcwcalls.calls == identity_calls(value)
+        assert len(funcwcalls.files) == 1
+
+
+@pytest.mark.parametrize(
+    "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
+)
+def test_function_wrapper_records_calls(tmp_path, monkeypatch, value):
+    monkeypatch.setattr(
+        FunctionWCalls,
+        "path",
+        property(lambda self: tmp_path / "recordings"),
+    )
+    funcwcalls = FunctionWCalls(call_funcs, record=True)
+
+    with patch_both(funcwcalls):
+        assert funcwcalls(value) == value
+        assert funcwcalls.record is True
+        assert funcwcalls.calls == call_funcs_calls(value)
+        assert len(funcwcalls.files) == 1
 
 
 def test_function_wrapper_uses_provided_calls():
     calls = []
 
-    wrapper = FunctionWCalls(identity, record=True, calls=calls)
+    funcwcalls = FunctionWCalls(identity, record=True, calls=calls)
 
-    assert wrapper.calls is calls
-    assert wrapper.record is True
+    assert funcwcalls.calls is calls
+    assert funcwcalls.record is True
 
 
-def test_function_wrapper_records_and_recalls_from_explicit_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
+)
+def test_function_wrapper_records_and_recalls_from_explicit_file(
+    tmp_path, monkeypatch, value
+):
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
     file = tmp_path / "recordings" / "explicit.pkl"
-    recorded_calls = []
     recorder = FunctionWCalls(
-        lambda value: NoMockRecord("dependency", dependency, calls=recorded_calls)(
-            value
-        ),
+        call_funcs,
         record=True,
-        calls=recorded_calls,
         file=file,
     )
 
-    assert recorder("value") == "result: value"
-    assert file.is_file()
+    with patch_both(recorder):
+        assert recorder(value) == value
+        assert file.is_file()
+        assert recorder.calls == call_funcs_calls(value)
 
-    replayed_calls = []
     replayer = FunctionWCalls(
-        lambda value: NoMockRecall("dependency", calls=replayed_calls)(value),
-        calls=replayed_calls,
+        call_funcs,
+        record=False,
         file=file,
     )
 
-    assert replayer("value") == "result: value"
-    assert replayed_calls == []
+    with patch_both(replayer):
+        assert replayer(value) == value
+        assert replayer.calls == []
 
 
 def test_call_record_requires_empty_calls():
-    wrapper = FunctionWCalls(identity, calls=[_Call("identity", (), {}, None)])
+    funcwcalls = FunctionWCalls(identity, calls=[_Call("identity", (), {}, None)])
 
     try:
-        wrapper._call_record()
+        funcwcalls._call_record()
     except AssertionError as exc:
         assert "Calls should be empty" in str(exc)
     else:
@@ -87,24 +160,24 @@ def test_call_record_saves_calls(tmp_path, monkeypatch):
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
-    wrapper = FunctionWCalls(identity)
+    funcwcalls = FunctionWCalls(call_funcs)
 
-    assert wrapper._call_record("recorded") == "recorded"
+    assert funcwcalls._call_record("recorded") == "recorded"
 
-    assert wrapper.calls == []
-    assert len(wrapper.files) == 1
+    assert funcwcalls.calls == []
+    assert len(funcwcalls.files) == 1
 
 
 def test_call_recall_requires_recording_files(tmp_path, monkeypatch):
-    wrapper = FunctionWCalls(identity)
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
         property(lambda self: tmp_path / "missing"),
     )
+    funcwcalls = FunctionWCalls(identity)
 
     try:
-        wrapper._call_recall()
+        funcwcalls._call_recall()
     except AssertionError as exc:
         assert "No recorded calls found" in str(exc)
     else:
@@ -112,6 +185,11 @@ def test_call_recall_requires_recording_files(tmp_path, monkeypatch):
 
 
 def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        FunctionWCalls,
+        "path",
+        property(lambda self: tmp_path / "recordings"),
+    )
     events = []
 
     class Case(unittest.TestCase):
@@ -122,25 +200,20 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
             events.append("tearDown")
 
         def run_case(self):
-            call = wrapper.calls[0]
-            output = NoMockRecall(call.target, calls=wrapper.calls)()
+            call = funcwcalls.calls[0]
+            output = NoMockRecall(call.target, calls=funcwcalls.calls)()
             events.append((self._testMethodName, output))
             return output
 
     case = Case("run_case")
-    wrapper = FunctionWCalls(case.run_case)
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
-    wrapper.calls.append(_Call("one", (), {}, "first", post_args=(), post_kwargs={}))
-    wrapper.save("one")
-    wrapper.calls[:] = [_Call("two", (), {}, "second", post_args=(), post_kwargs={})]
-    wrapper.save("two")
-    wrapper.calls.clear()
+    funcwcalls = FunctionWCalls(case.run_case)
+    funcwcalls.calls[:] = [_Call("one", (), {}, "first", post_args=(), post_kwargs={})]
+    funcwcalls.save("one")
+    funcwcalls.calls[:] = [_Call("two", (), {}, "second", post_args=(), post_kwargs={})]
+    funcwcalls.save("two")
+    funcwcalls.calls.clear()
 
-    outputs = wrapper()
+    outputs = funcwcalls()
 
     assert outputs == None
     assert [event[1] for event in events if isinstance(event, tuple)] == [
@@ -151,7 +224,7 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
 
 def test_test_case_reset_skips_plain_function():
-    FunctionWCalls(identity)._TestCaseReset()
+    assert not FunctionWCalls(identity)._TestCaseReset()
 
 
 def test_function_path_for_function_and_method():
@@ -172,18 +245,18 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
-    wrapper = FunctionWCalls(identity)
-    wrapper.calls.append(
+    funcwcalls = FunctionWCalls(identity)
+    funcwcalls.calls.append(
         _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     )
-    wrapper.save("z-last")
-    wrapper.save("a-first")
+    funcwcalls.save("z-last")
+    funcwcalls.save("a-first")
 
-    assert [path.name for path in wrapper.files] == ["a-first.pkl", "z-last.pkl"]
+    assert [path.name for path in funcwcalls.files] == ["a-first.pkl", "z-last.pkl"]
 
-    wrapper.calls.clear()
-    wrapper._load_file(wrapper.files[0])
-    assert wrapper.calls == [
+    funcwcalls.calls.clear()
+    funcwcalls._load_file(funcwcalls.files[0])
+    assert funcwcalls.calls == [
         _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     ]
 
@@ -194,7 +267,7 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
         "path",
         property(lambda self: tmp_path / "recordings"),
     )
-    wrapper = FunctionWCalls(identity)
+    funcwcalls = FunctionWCalls(identity)
     original = _Call(
         "identity",
         (b"value",),
@@ -203,12 +276,12 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
         post_args=(None,),
         post_kwargs={"tags": None},
     )
-    wrapper.calls.append(original)
-    wrapper.save("typed-values")
+    funcwcalls.calls.append(original)
+    funcwcalls.save("typed-values")
 
-    wrapper.calls.clear()
-    wrapper._load_file(wrapper.files[0])
+    funcwcalls.calls.clear()
+    funcwcalls._load_file(funcwcalls.files[0])
 
-    assert wrapper.calls == [original]
-    assert isinstance(wrapper.calls[0].args[0], bytes)
-    assert isinstance(wrapper.calls[0].kwargs["tags"], set)
+    assert funcwcalls.calls == [original]
+    assert isinstance(funcwcalls.calls[0].args[0], bytes)
+    assert isinstance(funcwcalls.calls[0].kwargs["tags"], set)

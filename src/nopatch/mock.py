@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import wraps
+from functools import partial, wraps
 from pathlib import Path
 from typing import (
     Any,
@@ -14,9 +14,11 @@ from typing import (
     Generic,
     List,
     Literal,
+    Mapping,
     Optional,
     Tuple,
     TypeVar,
+    Union,
     overload,
 )
 from unittest.mock import Mock, patch
@@ -58,15 +60,6 @@ class _Call:
             object.__setattr__(self, "post_kwargs", dict.fromkeys(self.kwargs))
 
 
-def _can_update(target: Any) -> bool:
-    """Check if the target is a mutable collection that can be updated by _update_mutable_argument."""
-    if isinstance(target, (MutableSequence, MutableMapping, MutableSet)):
-        return True
-    if isinstance(target, Sequence) and not isinstance(target, (str, bytes, bytearray)):
-        return all(_can_update(item) for item in target)
-    return False
-
-
 def _for_update(arg: _RType, rarg: _RType) -> Optional[_RType]:
     """Return the post-call argument for updating mutable arguments."""
     if type(arg) != type(rarg):
@@ -77,8 +70,12 @@ def _for_update(arg: _RType, rarg: _RType) -> Optional[_RType]:
         raise ValueError(f"Argument {arg} is not picklable.")
     if dill.dumps(arg) == dill.dumps(rarg):
         return None
-    if _can_update(arg):
+    if isinstance(arg, (MutableSequence, MutableMapping, MutableSet)):
         return dill.copy(rarg)
+    if isinstance(arg, Sequence) and not isinstance(arg, (str, bytes, bytearray)):
+        return type(arg)(_for_update(item, ritem) for item, ritem in zip(arg, rarg))  # type: ignore
+    if isinstance(arg, Mapping):
+        return type(arg)({k: _for_update(v, rarg[k]) for k, v in arg.items()})  # type: ignore
     raise TypeError(f"Cannot update mutable argument of type {type(arg).__name__}.")
 
 
@@ -109,6 +106,11 @@ def _update_argument(target: _RType, updated: Optional[_RType]) -> None:
         assert isinstance(updated, Sequence)
         for target_item, updated_item in zip(target, updated):
             _update_argument(target_item, updated_item)
+        return
+    if isinstance(target, Mapping):
+        assert isinstance(updated, Mapping)
+        for key, value in target.items():
+            _update_argument(value, updated[key])
         return
     raise TypeError(f"Cannot update mutable argument of type {type(target).__name__}.")
 
@@ -247,8 +249,8 @@ class FunctionWCalls(Generic[_HParams, _RType]):
         cls,
         function: Callable[_HParams, _RType],
         *,
-        file: Optional[Path],
-        record: Literal[True] = ...,
+        record: Literal[True],
+        file: Optional[Path] = ...,
         calls: Optional[List[_Call]] = ...,
     ) -> FunctionWCalls[_HParams, _RType]: ...
 
@@ -329,13 +331,15 @@ class FunctionWCalls(Generic[_HParams, _RType]):
                 self._TestCaseReset()
             self._call_recall_calls(*args, **kwargs)
 
-    def _TestCaseReset(self):
+    def _TestCaseReset(self) -> bool:
         """Calls tearDown/setUp method if the function is a method of a TestCase."""
         if hasattr(self.func, "__self__"):
             testcase = self.func.__self__  # type: ignore
             if isinstance(testcase, unittest.TestCase):
                 testcase.tearDown()
                 testcase.setUp()
+                return True
+        return False
 
     @property
     def path(self) -> Path:
@@ -418,23 +422,48 @@ def nodecorator(
     return wrapper
 
 
-def nopatch(target: str):
-    def wrapper(
-        func: Callable[_HParams, Optional[_RType]],
-    ) -> Callable[_HParams, Optional[_RType]]:
+def nopatchermock(target: str, funcwcalls: FunctionWCalls) -> NoMockBase:
+    record = funcwcalls.record
+    calls = funcwcalls.calls
+    if record:
+        patched_func, _ = patch(target).get_original()
+        return NoMockRecord(target, patched_func, calls=calls)
+    return NoMockRecall(target, calls=calls)
+
+
+@overload
+def nopatcher(
+    func: FunctionWCalls[_HParams, _RType], target: str
+) -> FunctionWCalls[_HParams, _RType]: ...
+@overload
+def nopatcher(
+    func: Callable[_HParams, Optional[_RType]], target: str
+) -> Callable[_HParams, Optional[_RType]]: ...
+
+
+def nopatcher(
+    func: Union[Callable[_HParams, Optional[_RType]], FunctionWCalls[_HParams, _RType]],
+    target: str,
+) -> Union[Callable[_HParams, Optional[_RType]], FunctionWCalls[_HParams, _RType]]:
+    return_functionWCalls = isinstance(func, FunctionWCalls)
+    if return_functionWCalls:
+        function_with_calls: FunctionWCalls = func
+        func = function_with_calls.func
+    else:
         if not func_has_calls(func):
             func = nodecorator()(func)
         function_with_calls: FunctionWCalls = func.function_with_calls  # type: ignore
         func = function_with_calls.func
-        record = function_with_calls.record
-        calls = function_with_calls.calls
-        file = function_with_calls.file
-        if record:
-            patched_func, _ = patch(target).get_original()
-            mock = NoMockRecord(target, patched_func, calls=calls)
-        else:
-            mock = NoMockRecall(target, calls=calls)
-        _func = patch(target, mock)(func)
+    record = function_with_calls.record
+    calls = function_with_calls.calls
+    file = function_with_calls.file
+    mock = nopatchermock(target, function_with_calls)
+    _func = patch(target, mock)(func)
+    if return_functionWCalls:
+        return FunctionWCalls(_func, record=record, calls=calls, file=file)
+    else:
         return _set_patched_func(_func, record=record, calls=calls, file=file)
 
-    return wrapper
+
+def nopatch(target: str):
+    return partial(nopatcher, target=target)
