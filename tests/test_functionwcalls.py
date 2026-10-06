@@ -4,18 +4,17 @@ from unittest.mock import patch
 
 import pytest
 
-import nopatch.mock as mock_module
+from nopatch.util import timestamp
 from nopatch.mock import (
-    FunctionWCalls,
     NoMockRecall,
-    NoMockRecord,
-    _Call,
-    nopatchermock,
+    Call,
 )
+from nopatch.funcwcalls import FunctionWCalls
+from nopatch.decorators import nopatchermock
 
 
 def test_timestamp_is_safe_for_windows_paths():
-    assert not any(char in mock_module.timestamp for char in '<>:"/\\|?*')
+    assert not any(char in timestamp for char in '<>:"/\\|?*')
 
 
 def identity(value=None):
@@ -35,11 +34,11 @@ def call_funcs(value):
 
 
 def identity_calls(value):
-    return [_Call(f"{__name__}.identity", (value,), {}, value)]
+    return [Call(f"{__name__}.identity", (value,), {}, value)]
 
 
 def dependency_calls(value):
-    return [_Call(f"{__name__}.dependency", (value,), {}, f"result: {value}")]
+    return [Call(f"{__name__}.dependency", (value,), {}, f"result: {value}")]
 
 
 def call_funcs_calls(value):
@@ -144,7 +143,7 @@ def test_function_wrapper_records_and_recalls_from_explicit_file(
 
 
 def test_call_record_requires_empty_calls():
-    funcwcalls = FunctionWCalls(identity, calls=[_Call("identity", (), {}, None)])
+    funcwcalls = FunctionWCalls(identity, calls=[Call("identity", (), {}, None)])
 
     try:
         funcwcalls._call_record()
@@ -207,9 +206,9 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
     case = Case("run_case")
     funcwcalls = FunctionWCalls(case.run_case)
-    funcwcalls.calls[:] = [_Call("one", (), {}, "first", post_args=(), post_kwargs={})]
+    funcwcalls.calls[:] = [Call("one", (), {}, "first", post_args=(), post_kwargs={})]
     funcwcalls.save("one")
-    funcwcalls.calls[:] = [_Call("two", (), {}, "second", post_args=(), post_kwargs={})]
+    funcwcalls.calls[:] = [Call("two", (), {}, "second", post_args=(), post_kwargs={})]
     funcwcalls.save("two")
     funcwcalls.calls.clear()
 
@@ -247,7 +246,7 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
     )
     funcwcalls = FunctionWCalls(identity)
     funcwcalls.calls.append(
-        _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
+        Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     )
     funcwcalls.save("z-last")
     funcwcalls.save("a-first")
@@ -257,7 +256,7 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
     funcwcalls.calls.clear()
     funcwcalls._load_file(funcwcalls.files[0])
     assert funcwcalls.calls == [
-        _Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
+        Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     ]
 
 
@@ -268,7 +267,7 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
         property(lambda self: tmp_path / "recordings"),
     )
     funcwcalls = FunctionWCalls(identity)
-    original = _Call(
+    original = Call(
         "identity",
         (b"value",),
         {"tags": {"one", "two"}},

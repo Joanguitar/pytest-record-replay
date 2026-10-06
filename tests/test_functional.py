@@ -1,4 +1,4 @@
-from nopatch import nopatch, recording
+from nopatch.decorators import nopatch, recording
 
 
 run_count = {

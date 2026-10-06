@@ -1,12 +1,11 @@
 from collections import defaultdict, deque
-from types import MappingProxyType, SimpleNamespace
+from types import MappingProxyType
 
 import pytest
 
-import nopatch
-import nopatch.mock as mock_module
+import nopatch.util as util_module
 from nopatch.mock import (
-    _Call,
+    Call,
     _configure_patch,
     _for_update,
     _update_argument,
@@ -14,7 +13,7 @@ from nopatch.mock import (
 
 
 def test_call_post_state_defaults_to_none_values_matching_arguments():
-    call = _Call(
+    call = Call(
         "identity",
         ("argument", 2),
         {"named": "value", "other": 3},
@@ -97,27 +96,13 @@ def test_update_argument_rejects_wrong_type():
 
 
 def test_configure_patch_updates_global_record_mode():
-    og_recording = mock_module._recording
+    og_recording = util_module._recording
 
     _configure_patch(False)
-    assert mock_module._recording is False
+    assert util_module._recording is False
 
     _configure_patch(True)
-    assert mock_module._recording is True
+    assert util_module._recording is True
 
     _configure_patch(og_recording)
-    assert mock_module._recording is og_recording
-
-
-def test_package_attribute_lookup_reports_missing_names():
-    assert nopatch.__all__ == [
-        "NoMockBase",
-        "NoMockRecord",
-        "NoMockRecall",
-        "nopatch",
-        "nodecorator",
-        "recording",
-    ]
-    assert nopatch.__getattr__("NoMockRecord") is mock_module.NoMockRecord
-    with pytest.raises(AttributeError, match="has no attribute"):
-        nopatch.__getattr__("missing")
+    assert util_module._recording is og_recording

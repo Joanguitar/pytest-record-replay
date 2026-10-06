@@ -31,8 +31,14 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-    "--cov=nopatch.mock",
+    "--cov=nopatch",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-report=html:coverage",
+]
+
+[tool.coverage.run]
+omit = [
+    "src/nopatch/__init__.py",
+    "src/nopatch/pytest_plugin.py",
 ]
