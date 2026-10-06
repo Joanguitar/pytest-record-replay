@@ -14,9 +14,16 @@ from nopatch.mock import (
 )
 
 
-def test_call_fields_default_to_none_for_post_state():
-    assert _Call("identity", (), {}, "value").post_args is None
-    assert _Call("identity", (), {}, "value").post_kwargs is None
+def test_call_post_state_defaults_to_none_values_matching_arguments():
+    call = _Call(
+        "identity",
+        ("argument", 2),
+        {"named": "value", "other": 3},
+        "result",
+    )
+
+    assert call.post_args == (None, None)
+    assert call.post_kwargs == {"named": None, "other": None}
 
 
 def test_can_update_detects_mutable_collections():
@@ -74,7 +81,8 @@ def test_for_update_handles_invalid_and_unhandled_mutables():
 
 def test_update_argument_handles_none_and_nested_sequences():
     target = [1, 2]
-    assert _update_argument(target, None) is target
+    _update_argument(target, None)
+    assert target == [1, 2]
 
     target = ([1, 2], {"a": [3]})
     updated = ([9], {"a": [4]})

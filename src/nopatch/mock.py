@@ -4,11 +4,21 @@ import inspect
 import unittest
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Generic, List, Literal, Optional, Tuple, TypeVar, overload
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    TypeVar,
+    overload,
+)
 from unittest.mock import Mock, patch
 import warnings
 
@@ -38,8 +48,14 @@ class _Call:
     args: tuple
     kwargs: dict
     output: Any
-    post_args: Optional[Tuple[Any, ...]] = None
-    post_kwargs: Optional[dict] = None
+    post_args: Tuple[Any, ...] = ()
+    post_kwargs: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.post_args and self.args:
+            object.__setattr__(self, "post_args", (None,) * len(self.args))
+        if not self.post_kwargs and self.kwargs:
+            object.__setattr__(self, "post_kwargs", dict.fromkeys(self.kwargs))
 
 
 def _can_update(target: Any) -> bool:
@@ -69,20 +85,28 @@ def _for_update(arg: _RType, rarg: _RType) -> Optional[_RType]:
 def _update_argument(target: _RType, updated: Optional[_RType]) -> None:
     """Restore any in-place mutations captured after a recorded call."""
     if updated is None:
-        return target
+        return
     if type(target) != type(updated):
         raise TypeError(
             f"Cannot update mutable argument of type {type(target).__name__} with {type(updated).__name__}."
         )
     if isinstance(target, MutableSequence):
+        assert isinstance(updated, MutableSequence)
         target.clear()
         target.extend(updated)
         return
-    if isinstance(target, (MutableMapping, MutableSet)):
+    if isinstance(target, MutableMapping):
+        assert isinstance(updated, MutableMapping)
         target.clear()
         target.update(updated)
         return
+    if isinstance(target, MutableSet):
+        assert isinstance(updated, MutableSet)
+        target.clear()
+        target |= updated
+        return
     if isinstance(target, Sequence) and not isinstance(target, (str, bytes, bytearray)):
+        assert isinstance(updated, Sequence)
         for target_item, updated_item in zip(target, updated):
             _update_argument(target_item, updated_item)
         return
@@ -163,7 +187,9 @@ class NoMockRecord(NoMockBase):
 class NoMockRecall(NoMockBase):
     """Replay the outputs recorded by a :class:`NoMockRecord` instance."""
 
-    def __init__(self, target: str, *args, calls: List[_Call] = None, **kwargs):
+    def __init__(
+        self, target: str, *args, calls: Optional[List[_Call]] = None, **kwargs
+    ):
         super().__init__(target, *args, calls=calls, **kwargs)
 
     def _execute_mock_call(self, /, *args, **kwargs):
@@ -187,53 +213,71 @@ class FunctionWCalls(Generic[_HParams, _RType]):
     """Wrap a test function to have calls attribute."""
 
     @overload
-    def __init__(
-        self,
-        function: Callable[_HParams, _RType],
-        record: bool = ...,
-        calls: Optional[List[_Call]] = ...,
-        file: Path = ...,
-    ): ...
-
-    @overload
-    def __init__(
-        self,
-        function: Callable[_HParams, _RType],
-        record: bool = ...,
-        calls: List[_Call] = ...,
-        file: Optional[Path] = ...,
-    ): ...
-
-    @overload
-    def __init__(
-        self,
-        function: Callable[_HParams, _RType],
+    def __new__(
+        cls,
+        function: Callable[_HParams, Any],
+        *,
         record: Literal[False] = ...,
-        calls: Optional[List[_Call]] = ...,
-        file: Optional[Path] = ...,
-    ): ...
-
-    @overload
-    def __init__(
-        self,
-        function: Callable[_HParams, None],
-        record: Literal[True] = ...,
         calls: None = ...,
         file: None = ...,
-    ): ...
+    ) -> FunctionWCalls[_HParams, None]: ...
+
+    @overload
+    def __new__(
+        cls,
+        function: Callable[_HParams, _RType],
+        *,
+        file: Path,
+        record: bool = ...,
+        calls: Optional[List[_Call]] = ...,
+    ) -> FunctionWCalls[_HParams, _RType]: ...
+
+    @overload
+    def __new__(
+        cls,
+        function: Callable[_HParams, _RType],
+        *,
+        calls: List[_Call],
+        record: bool = ...,
+        file: Optional[Path] = ...,
+    ) -> FunctionWCalls[_HParams, _RType]: ...
+
+    @overload
+    def __new__(
+        cls,
+        function: Callable[_HParams, _RType],
+        *,
+        file: Optional[Path],
+        record: Literal[True] = ...,
+        calls: Optional[List[_Call]] = ...,
+    ) -> FunctionWCalls[_HParams, _RType]: ...
+
+    def __new__(
+        cls,
+        function: Callable[_HParams, Any],
+        *,
+        record: bool = False,
+        calls: Optional[List[_Call]] = None,
+        file: Optional[Path] = None,
+    ) -> FunctionWCalls[_HParams, Any]:
+        return super().__new__(cls)
 
     def __init__(
         self,
-        function: Callable[_HParams, _RType],
+        function: Callable,
+        *,
         record: bool = False,
         calls: Optional[List[_Call]] = None,
         file: Optional[Path] = None,
     ):
         self.func = function
         self.record: bool = record
-        if calls is not None and file is not None:
-            warnings.warn("Both calls and file are provided. Using calls.")
         self.calls: List[_Call] = calls if calls is not None else []
+        if len(self.calls) > 0:
+            if self.record:
+                raise ValueError("Calls should be empty when recording.")
+            if file is not None:
+                warnings.warn("Both calls and file provided. Using calls.")
         self.file = file
 
     def __call__(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
@@ -251,25 +295,32 @@ class FunctionWCalls(Generic[_HParams, _RType]):
             self._save_file(self.file)
         return output
 
-    def _call_recall(self, *args: _HParams.args, **kwargs: _HParams.kwargs):
+    def _call_recall(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
         if len(self.calls) > 0:
             return self._call_recall_calls(*args, **kwargs)
         if self.file is not None:
             return self._call_recall_file(*args, **kwargs)
         return self._call_recall_files(*args, **kwargs)
 
-    def _call_recall_calls(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
+    def _call_recall_calls(
+        self, *args: _HParams.args, **kwargs: _HParams.kwargs
+    ) -> _RType:
         output = self.func(*args, **kwargs)
         assert len(self.calls) == 0, (
             f"Unconsumed calls remain after replaying {self.calls}."
         )
         return output
 
-    def _call_recall_file(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> _RType:
+    def _call_recall_file(
+        self, *args: _HParams.args, **kwargs: _HParams.kwargs
+    ) -> _RType:
+        assert self.file is not None
         self._load_file(self.file)
         return self._call_recall_calls(*args, **kwargs)
 
-    def _call_recall_files(self, *args: _HParams.args, **kwargs: _HParams.kwargs) -> None:
+    def _call_recall_files(
+        self, *args: _HParams.args, **kwargs: _HParams.kwargs
+    ) -> _RType:  # type: ignore
         files = self.files
         assert len(files) > 0, "No recorded calls found."
         for ii, file in enumerate(files):
@@ -280,11 +331,11 @@ class FunctionWCalls(Generic[_HParams, _RType]):
 
     def _TestCaseReset(self):
         """Calls tearDown/setUp method if the function is a method of a TestCase."""
-        if hasattr(self.func, "__self__") and isinstance(
-            self.func.__self__, unittest.TestCase
-        ):
-            self.func.__self__.tearDown()
-            self.func.__self__.setUp()
+        if hasattr(self.func, "__self__"):
+            testcase = self.func.__self__  # type: ignore
+            if isinstance(testcase, unittest.TestCase):
+                testcase.tearDown()
+                testcase.setUp()
 
     @property
     def path(self) -> Path:
@@ -322,60 +373,68 @@ class FunctionWCalls(Generic[_HParams, _RType]):
         self._save_file(file)
 
 
+def func_has_calls(func: Callable) -> bool:
+    return hasattr(func, "function_with_calls") and isinstance(
+        func.function_with_calls,  # type: ignore
+        FunctionWCalls,
+    )
+
+
+def _set_patched_func(
+    func: Callable[_HParams, Optional[_RType]],
+    record: bool,
+    calls: Optional[List[_Call]],
+    file: Optional[Path],
+) -> Callable[_HParams, Optional[_RType]]:
+    function_with_calls = wraps(func)(
+        FunctionWCalls(func, record=record, calls=calls, file=file)
+    )
+
+    @wraps(func)
+    def patched_func(*args: _HParams.args, **kwargs: _HParams.kwargs):
+        return function_with_calls(*args, **kwargs)
+
+    patched_func.function_with_calls = function_with_calls  # type: ignore
+    return patched_func
+
+
 def nodecorator(
-    record: Optional[bool] = None,
-) -> Callable[[Callable[_HParams, None]], Callable[_HParams, None]]:
+    record: Optional[bool] = None, file: Optional[Path] = None
+) -> Callable[[Callable[_HParams, _RType]], Callable[_HParams, Optional[_RType]]]:
     """Return the function without any decoration."""
     if record is None:
-        record = _recording
+        record = recording()
 
-    patch_recording = patch(f"{__name__}.recording", Mock(return_value=record))
-
-    def wrapper(func: Callable[_HParams, None]) -> Callable[_HParams, None]:
-        if hasattr(func, "function_with_calls") and isinstance(
-            func.function_with_calls, FunctionWCalls
-        ):
-            raise ValueError(
+    def wrapper(
+        func: Callable[_HParams, _RType],
+    ) -> Callable[_HParams, Optional[_RType]]:
+        if func_has_calls(func):
+            raise AttributeError(
                 "@nodecorator should be applied before any @nopatch decorator."
             )
-        function_with_calls = wraps(func)(
-            FunctionWCalls(patch_recording(func), record=record)
-        )
-
-        @wraps(func)
-        def patched_function(*args: _HParams.args, **kwargs: _HParams.kwargs):
-            return function_with_calls(*args, **kwargs)
-
-        patched_function.function_with_calls = function_with_calls
-        return patched_function
+        _func = patch(f"{__name__}.recording", lambda: record)(func)
+        return _set_patched_func(_func, record=record, calls=None, file=file)
 
     return wrapper
 
 
 def nopatch(target: str):
-    def wrapper(func: Callable[_HParams, None]) -> Callable[_HParams, None]:
-        if not (
-            hasattr(func, "function_with_calls")
-            and isinstance(func.function_with_calls, FunctionWCalls)
-        ):
+    def wrapper(
+        func: Callable[_HParams, Optional[_RType]],
+    ) -> Callable[_HParams, Optional[_RType]]:
+        if not func_has_calls(func):
             func = nodecorator()(func)
-        function_with_calls: FunctionWCalls = func.function_with_calls
+        function_with_calls: FunctionWCalls = func.function_with_calls  # type: ignore
         func = function_with_calls.func
-        calls = function_with_calls.calls
         record = function_with_calls.record
-        if function_with_calls.record:
+        calls = function_with_calls.calls
+        file = function_with_calls.file
+        if record:
             patched_func, _ = patch(target).get_original()
-            _func = patch(target, NoMockRecord(target, patched_func, calls=calls))(func)
+            mock = NoMockRecord(target, patched_func, calls=calls)
         else:
-            _func = patch(target, NoMockRecall(target, calls=calls))(func)
-
-        function_with_calls = FunctionWCalls(_func, record=record, calls=calls)
-
-        @wraps(func)
-        def patched_function(*args: _HParams.args, **kwargs: _HParams.kwargs):
-            return function_with_calls(*args, **kwargs)
-
-        patched_function.function_with_calls = function_with_calls
-        return patched_function
+            mock = NoMockRecall(target, calls=calls)
+        _func = patch(target, mock)(func)
+        return _set_patched_func(_func, record=record, calls=calls, file=file)
 
     return wrapper

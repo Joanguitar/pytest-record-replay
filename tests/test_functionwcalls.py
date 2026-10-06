@@ -39,9 +39,7 @@ def test_function_wrapper_uses_provided_calls():
     assert wrapper.record is True
 
 
-def test_function_wrapper_records_and_recalls_from_explicit_file(
-    tmp_path, monkeypatch
-):
+def test_function_wrapper_records_and_recalls_from_explicit_file(tmp_path, monkeypatch):
     monkeypatch.setattr(
         FunctionWCalls,
         "path",
@@ -50,9 +48,9 @@ def test_function_wrapper_records_and_recalls_from_explicit_file(
     file = tmp_path / "recordings" / "explicit.pkl"
     recorded_calls = []
     recorder = FunctionWCalls(
-        lambda value: NoMockRecord(
-            "dependency", dependency, calls=recorded_calls
-        )(value),
+        lambda value: NoMockRecord("dependency", dependency, calls=recorded_calls)(
+            value
+        ),
         record=True,
         calls=recorded_calls,
         file=file,

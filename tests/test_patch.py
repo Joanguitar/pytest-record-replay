@@ -52,7 +52,7 @@ def test_nodecorator_patches_module_recording_reference_only(monkeypatch):
 def test_nodecorator_rejects_an_already_wrapped_function():
     wrapped = mock_module.nodecorator()(identity)
 
-    with pytest.raises(ValueError, match="should be applied before"):
+    with pytest.raises(AttributeError, match="should be applied before"):
         mock_module.nodecorator()(wrapped)
 
 
