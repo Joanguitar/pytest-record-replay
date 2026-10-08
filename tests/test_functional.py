@@ -1,4 +1,6 @@
-from nopatch.decorators import nopatch, recording
+from unittest.mock import Mock, patch
+
+from nopatch.decorators import nodecorator, nopatch, recording
 
 
 run_count = {
@@ -39,3 +41,17 @@ def test_multiple_functions_are_recorded():
     assert describe("test") == {"name": "test", "active": True}
     for key, value in run_count.items():
         assert value == run_count_old[key] + recording()
+
+
+@patch("nopatch.funcwcalls.FunctionWCalls._save")  # Don't actually save
+def test_recording_will_always_save(mock_save: Mock):
+    @nopatch(f"{__name__}.multiply")
+    @nopatch(f"{__name__}.describe")
+    @nodecorator(record=True)
+    def same_function():
+        assert multiply(10) == 20
+        assert describe("test")
+
+    same_function()
+
+    mock_save.assert_called_once()

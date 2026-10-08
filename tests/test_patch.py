@@ -63,7 +63,7 @@ def test_nopatcher_preserves_existing_functionwcalls_metadata(record: bool, file
     assert callable(patched.func)
 
 
-@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_nopatch_records_bound_method_without_receiver(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
     target = f"{__name__}.MethodDependency.value"
@@ -99,7 +99,7 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
 
 
 @pytest.mark.parametrize("record", [False, True])
-@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_nopatch_handles_existing_wrapper_and_both_modes(record):
     target = f"{__name__}.dependency"
 

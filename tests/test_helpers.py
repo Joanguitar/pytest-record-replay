@@ -106,9 +106,7 @@ def test_update_argument_rejects_immutable_updates():
 
 
 def test_funcwcalls_helpers_detect_and_return_wrapper_metadata():
-    function = set_funcwcalls(
-        lambda: None, record=False, calls=None, file=None
-    )
+    function = set_funcwcalls(lambda: None, record=False, calls=None, file=None)
 
     assert has_funcwcalls(function)
     assert isinstance(get_funcwcalls(function), FunctionWCalls)

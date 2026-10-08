@@ -1,6 +1,12 @@
 """Internal recording state and mutable-argument replay helpers."""
 
-from collections.abc import Mapping, MutableMapping, MutableSequence, MutableSet, Sequence
+from collections.abc import (
+    Mapping,
+    MutableMapping,
+    MutableSequence,
+    MutableSet,
+    Sequence,
+)
 from datetime import datetime
 from typing import Optional
 

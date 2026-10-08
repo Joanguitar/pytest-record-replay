@@ -115,7 +115,7 @@ class FunctionWCalls(Generic[P, R]):
         if self.file is None:
             self.save(timestamp)
         else:
-            self._save_file(self.file)
+            self._save(self.file)
         return output
 
     def _call_recall(self, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -126,9 +126,7 @@ class FunctionWCalls(Generic[P, R]):
             return self._call_recall_file(*args, **kwargs)
         return self._call_recall_files(*args, **kwargs)
 
-    def _call_recall_calls(
-        self, *args: P.args, **kwargs: P.kwargs
-    ) -> R:
+    def _call_recall_calls(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the function against in-memory calls and require full consumption."""
         output = self.func(*args, **kwargs)
         assert len(self.calls) == 0, (
@@ -136,22 +134,18 @@ class FunctionWCalls(Generic[P, R]):
         )
         return output
 
-    def _call_recall_file(
-        self, *args: P.args, **kwargs: P.kwargs
-    ) -> R:
+    def _call_recall_file(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Load the configured call file, then replay its calls."""
         assert self.file is not None
-        self._load_file(self.file)
+        self._load(self.file)
         return self._call_recall_calls(*args, **kwargs)
 
-    def _call_recall_files(
-        self, *args: P.args, **kwargs: P.kwargs
-    ) -> R:  # type: ignore
+    def _call_recall_files(self, *args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore
         """Replay each saved call file in sorted order."""
         files = self.files
         assert len(files) > 0, "No recorded calls found."
         for ii, file in enumerate(files):
-            self._load_file(file)
+            self._load(file)
             if ii > 0:
                 self._TestCaseReset()
             self._call_recall_calls(*args, **kwargs)
@@ -187,13 +181,13 @@ class FunctionWCalls(Generic[P, R]):
         """Return sorted pickle files in this function's recording directory."""
         return sorted(self.path.glob("*.pkl"))
 
-    def _save_file(self, file: Path):
+    def _save(self, file: Path):
         """Create the recording directory and serialize calls to ``file``."""
         file.parent.mkdir(parents=True, exist_ok=True)
         with open(file, "wb") as f:
             dill.dump(self.calls, f)
 
-    def _load_file(self, file: Path):
+    def _load(self, file: Path):
         """Replace the in-memory call list with calls loaded from ``file``."""
         with open(file, "rb") as f:
             calls_data = dill.load(f)
@@ -203,7 +197,7 @@ class FunctionWCalls(Generic[P, R]):
     def save(self, name: str):
         """Save calls in the default directory under ``name`` with a pickle suffix."""
         file = self.path / (name + ".pkl")
-        self._save_file(file)
+        self._save(file)
 
 
 def has_funcwcalls(func: Callable) -> bool:

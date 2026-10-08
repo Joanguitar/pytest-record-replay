@@ -1,4 +1,3 @@
-
 """Shared type variables and the recorded-call data structure."""
 
 from dataclasses import dataclass, field

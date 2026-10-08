@@ -67,7 +67,7 @@ def patch_both(funcwcalls: FunctionWCalls):
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_function_wrapper_records_call(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
@@ -80,7 +80,7 @@ def test_function_wrapper_records_call(value):
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_function_wrapper_records_calls(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
@@ -126,9 +126,7 @@ def test_recall_rejects_unconsumed_in_memory_calls():
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-def test_function_wrapper_records_and_recalls_from_explicit_file(
-    tmp_path, value
-):
+def test_function_wrapper_records_and_recalls_from_explicit_file(tmp_path, value):
     file = tmp_path / "recordings" / "explicit.pkl"
     recorder = FunctionWCalls(
         call_funcs,
@@ -260,7 +258,7 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
     assert [path.name for path in funcwcalls.files] == ["a-first.pkl", "z-last.pkl"]
 
     funcwcalls.calls.clear()
-    funcwcalls._load_file(funcwcalls.files[0])
+    funcwcalls._load(funcwcalls.files[0])
     assert funcwcalls.calls == [
         Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     ]
@@ -285,7 +283,7 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
     funcwcalls.save("typed-values")
 
     funcwcalls.calls.clear()
-    funcwcalls._load_file(funcwcalls.files[0])
+    funcwcalls._load(funcwcalls.files[0])
 
     assert funcwcalls.calls == [original]
     assert isinstance(funcwcalls.calls[0].args[0], bytes)

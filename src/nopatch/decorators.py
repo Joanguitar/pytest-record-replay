@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Optional, Union, overload
 from unittest.mock import patch
 
-from nopatch.funcwcalls import FunctionWCalls, set_funcwcalls, get_funcwcalls, has_funcwcalls
+from nopatch.funcwcalls import (
+    FunctionWCalls,
+    set_funcwcalls,
+    get_funcwcalls,
+    has_funcwcalls,
+)
 from nopatch.mock import NoMockBase, NoMockRecall, NoMockRecord
 from nopatch.typing import P, R
 from nopatch.util import recording
@@ -62,9 +67,7 @@ def nopatchermock(target: str, funcwcalls: FunctionWCalls) -> NoMockBase:
 
 
 @overload
-def nopatcher(
-    func: FunctionWCalls[P, R], target: str
-) -> FunctionWCalls[P, R]: ...
+def nopatcher(func: FunctionWCalls[P, R], target: str) -> FunctionWCalls[P, R]: ...
 @overload
 def nopatcher(
     func: Callable[P, Optional[R]], target: str
