@@ -7,11 +7,18 @@ external behavior without calling those dependencies every time.
 ## Install
 
 ```bash
-python -m pip install -e .
+python -m pip install nopatch
 ```
 
-Pytest loads the nopatch plugin after installation. Use `pytest --record` to
-record dependency calls. Run `pytest` without that option to replay them.
+After installation, pytest loads the nopatch plugin automatically. Use
+`pytest --record` to record dependency calls. Run `pytest` without that option
+to replay them.
+
+To install a local checkout for development, including the test dependencies:
+
+```bash
+python -m pip install -e ".[test]"
+```
 
 ## `@nopatch`
 
