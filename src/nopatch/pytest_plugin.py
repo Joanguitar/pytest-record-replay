@@ -4,6 +4,7 @@ import pytest
 
 
 def pytest_addoption(parser):
+    """Register the command-line option that enables recording mode."""
     parser.addoption(
         "--record",
         action="store_true",
@@ -13,14 +14,16 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    """Configure wrappers and load the saved call history for this run."""
+    """Set nopatch's recording mode from pytest's ``--record`` option."""
     record = config.getoption("--record")
-    from .mock import _configure_patch
+    from nopatch.util import _configure_patch
 
     _configure_patch(record)
 
 
 @pytest.fixture
-def nopatch_recording(request):
-    """Whether this pytest run was started with ``--record``."""
-    return request.config.getoption("--record")
+def nopatch_recording():
+    """Provide the active recording mode to a test as a boolean."""
+    from nopatch.util import recording
+
+    return recording()

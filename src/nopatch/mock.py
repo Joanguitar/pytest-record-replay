@@ -1,47 +1,36 @@
 """Callable recording and replay primitives."""
 
-import inspect
-import unittest
 from abc import ABC, abstractmethod
-from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime
-from functools import partial, wraps
-from pathlib import Path
 from typing import (
-    Any,
     Callable,
-    Generic,
     List,
-    Literal,
-    Mapping,
     Optional,
-    Tuple,
-    TypeVar,
-    Union,
-    overload,
 )
-from unittest.mock import Mock, patch
-import warnings
+from unittest.mock import Mock
 
 import dill
-from typing_extensions import ParamSpec
 
-from nopatch.typing import P, R, Call
-from nopatch.util import _configure_patch, _for_update, _update_argument
+from nopatch.typing import Call
+from nopatch.util import _for_update, _update_argument
 
 
 class NoMockBase(ABC, Mock):
-    """Base class for recording and replaying function calls."""
+    """Base mock that shares a call list and supports method descriptor binding.
+
+    Subclasses implement ``_execute_mock_call`` to either invoke and record the
+    original callable or consume a matching saved call.
+    """
 
     def __init__(
         self, target: str, *args, calls: Optional[List[Call]] = None, **kwargs
     ):
+        """Initialize the mock and optionally share an existing call list."""
         super().__init__(*args, **kwargs)
         self._target = target
         self._calls = calls if calls is not None else []
 
     def __get__(self, instance, owner=None):
+        """Bind a recorder to an instance method or return a replay descriptor."""
         if instance is None:
             return self
         if isinstance(self, NoMockRecord):
@@ -54,7 +43,7 @@ class NoMockBase(ABC, Mock):
 
 
 class NoMockRecord(NoMockBase):
-    """Call a function normally while saving its inputs and output."""
+    """Invoke an original callable and append a serializable call record."""
 
     def __init__(
         self,
@@ -64,10 +53,12 @@ class NoMockRecord(NoMockBase):
         calls: Optional[List[Call]] = None,
         **kwargs,
     ):
+        """Create a recorder for ``target`` using ``function`` as its original."""
         super().__init__(target, *args, calls=calls, **kwargs)
         self.function = function
 
     def _execute_mock_call(self, /, *args, **kwargs):
+        """Validate, deep-copy, invoke, and record one call."""
         # Make sure that the arguments and the output are picklable before recording
         for arg in args:
             if not dill.pickles(arg, exact=True):
@@ -103,14 +94,16 @@ class NoMockRecord(NoMockBase):
 
 
 class NoMockRecall(NoMockBase):
-    """Replay the outputs recorded by a :class:`NoMockRecord` instance."""
+    """Replay saved outputs while validating inputs and restoring mutations."""
 
     def __init__(
         self, target: str, *args, calls: Optional[List[Call]] = None, **kwargs
     ):
+        """Create a replay mock sharing the supplied call history."""
         super().__init__(target, *args, calls=calls, **kwargs)
 
     def _execute_mock_call(self, /, *args, **kwargs):
+        """Consume and validate the next call, apply updates, and return output."""
         call = self._calls.pop(0)
         if call.target != self._target:
             raise ValueError(
@@ -125,4 +118,3 @@ class NoMockRecall(NoMockBase):
         for key, value in kwargs.items():
             _update_argument(value, call.post_kwargs[key])
         return call.output
-

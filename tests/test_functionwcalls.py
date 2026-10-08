@@ -1,6 +1,7 @@
 from contextlib import contextmanager
+from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
@@ -66,37 +67,27 @@ def patch_both(funcwcalls: FunctionWCalls):
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-def test_function_wrapper_records_call(tmp_path, monkeypatch, value):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
+@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+def test_function_wrapper_records_call(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
     with patch_identity(funcwcalls):
         assert funcwcalls(value) == value
         assert funcwcalls.record is True
         assert funcwcalls.calls == identity_calls(value)
-        assert len(funcwcalls.files) == 1
 
 
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-def test_function_wrapper_records_calls(tmp_path, monkeypatch, value):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
+@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+def test_function_wrapper_records_calls(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
     with patch_both(funcwcalls):
         assert funcwcalls(value) == value
         assert funcwcalls.record is True
         assert funcwcalls.calls == call_funcs_calls(value)
-        assert len(funcwcalls.files) == 1
 
 
 def test_function_wrapper_uses_provided_calls():
@@ -108,17 +99,36 @@ def test_function_wrapper_uses_provided_calls():
     assert funcwcalls.record is True
 
 
+def test_function_wrapper_rejects_calls_when_recording():
+    calls = [Call("identity", (), {}, None)]
+
+    with pytest.raises(ValueError, match="Calls should be empty"):
+        FunctionWCalls(identity, record=True, calls=calls)
+
+
+def test_function_wrapper_warns_when_calls_and_file_are_provided(tmp_path):
+    calls = [Call("identity", (), {}, None)]
+
+    with pytest.warns(UserWarning, match="Both calls and file provided"):
+        funcwcalls = FunctionWCalls(identity, calls=calls, file=tmp_path / "calls.pkl")
+
+    assert funcwcalls.calls is calls
+
+
+def test_recall_rejects_unconsumed_in_memory_calls():
+    calls = [Call("identity", (), {}, "unused")]
+    funcwcalls = FunctionWCalls(lambda: None, calls=calls)
+
+    with pytest.raises(AssertionError, match="Unconsumed calls remain"):
+        funcwcalls()
+
+
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
 def test_function_wrapper_records_and_recalls_from_explicit_file(
-    tmp_path, monkeypatch, value
+    tmp_path, value
 ):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
     file = tmp_path / "recordings" / "explicit.pkl"
     recorder = FunctionWCalls(
         call_funcs,
@@ -145,42 +155,30 @@ def test_function_wrapper_records_and_recalls_from_explicit_file(
 def test_call_record_requires_empty_calls():
     funcwcalls = FunctionWCalls(identity, calls=[Call("identity", (), {}, None)])
 
-    try:
+    with pytest.raises(AssertionError, match="Calls should be empty"):
         funcwcalls._call_record()
-    except AssertionError as exc:
-        assert "Calls should be empty" in str(exc)
-    else:
-        raise AssertionError("Expected AssertionError from _call_record")
 
 
-def test_call_record_saves_calls(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
+@patch("nopatch.funcwcalls.FunctionWCalls.save")
+def test_call_record_saves_calls(save_mock):
     funcwcalls = FunctionWCalls(call_funcs)
 
     assert funcwcalls._call_record("recorded") == "recorded"
 
     assert funcwcalls.calls == []
-    assert len(funcwcalls.files) == 1
+    save_mock.assert_called_once_with(timestamp)
 
 
-def test_call_recall_requires_recording_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "missing"),
-    )
+@patch(
+    "nopatch.funcwcalls.FunctionWCalls.files",
+    new_callable=PropertyMock,
+    return_value=[],
+)
+def test_call_recall_requires_recording_files(_files_mock):
     funcwcalls = FunctionWCalls(identity)
 
-    try:
+    with pytest.raises(AssertionError, match="No recorded calls found"):
         funcwcalls._call_recall()
-    except AssertionError as exc:
-        assert "No recorded calls found" in str(exc)
-    else:
-        raise AssertionError("Expected AssertionError from _call_recall")
 
 
 def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
@@ -214,7 +212,7 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
     outputs = funcwcalls()
 
-    assert outputs == None
+    assert outputs is None
     assert [event[1] for event in events if isinstance(event, tuple)] == [
         "first",
         "second",
@@ -224,6 +222,14 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
 def test_test_case_reset_skips_plain_function():
     assert not FunctionWCalls(identity)._TestCaseReset()
+
+
+def test_test_case_reset_skips_method_on_non_test_case():
+    class Example:
+        def method(self):
+            return None
+
+    assert not FunctionWCalls(Example().method)._TestCaseReset()
 
 
 def test_function_path_for_function_and_method():

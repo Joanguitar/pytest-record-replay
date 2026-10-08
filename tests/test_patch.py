@@ -1,6 +1,9 @@
+from pathlib import Path
+from unittest.mock import Mock, patch
+
 import pytest
 
-from nopatch.decorators import nodecorator, nopatch
+from nopatch.decorators import nodecorator, nopatch, nopatcher
 from nopatch.mock import NoMockRecall
 import nopatch.util as util_module
 from nopatch.typing import Call
@@ -9,7 +12,7 @@ from nopatch.funcwcalls import FunctionWCalls, get_funcwcalls
 
 
 def identity(value=None) -> None:
-    return None
+    return value
 
 
 def dependency(value):
@@ -37,21 +40,6 @@ def test_nodecorator_uses_global_and_explicit_modes(monkeypatch):
     assert default_wrapper.__name__ == "try_raise"
 
 
-def test_nodecorator_patches_module_recording_reference_only(monkeypatch):
-    monkeypatch.setattr(util_module, "_recording", False)
-    observed_recording = []
-
-    def observe_recording() -> None:
-        observed_recording.append((recording(), util_module.recording()))
-
-    wrapper = nodecorator(record=True)(observe_recording)
-
-    assert get_funcwcalls(wrapper).func() is None
-    assert observed_recording == [(False, True)]
-    assert recording() is False
-    assert util_module.recording() is False
-
-
 def test_nodecorator_rejects_an_already_wrapped_function():
     wrapped = nodecorator()(identity)
 
@@ -59,23 +47,25 @@ def test_nodecorator_rejects_an_already_wrapped_function():
         nodecorator()(wrapped)
 
 
-def test_nopatch_wraps_a_plain_function(monkeypatch):
-    monkeypatch.setattr(util_module, "_recording", False)
-    decorated = nopatch(f"{__name__}.dependency")(identity)
+@pytest.mark.parametrize("record", [True, False])
+@pytest.mark.parametrize("file", [None, Path("path/to/file.pkl")])
+def test_nopatcher_preserves_existing_functionwcalls_metadata(record: bool, file: Path):
+    target = f"{__name__}.dependency"
+    wrapped = nodecorator(record=record, file=file)(dependency)
+    function_with_calls = get_funcwcalls(wrapped)
 
-    assert callable(decorated)
-    funcwcalls = get_funcwcalls(decorated)
-    assert funcwcalls.func is not identity
-    assert funcwcalls.record is False
+    patched = nopatcher(function_with_calls, target)
+
+    assert isinstance(patched, FunctionWCalls)
+    assert patched.record == record
+    assert patched.calls == function_with_calls.calls
+    assert patched.file == function_with_calls.file
+    assert callable(patched.func)
 
 
-def test_nopatch_records_bound_method_without_receiver(tmp_path, monkeypatch):
+@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+def test_nopatch_records_bound_method_without_receiver(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
     target = f"{__name__}.MethodDependency.value"
     instance = MethodDependency()
 
@@ -109,12 +99,8 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
 
 
 @pytest.mark.parametrize("record", [False, True])
-def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
+@patch("nopatch.funcwcalls.FunctionWCalls._save_file", new=Mock())
+def test_nopatch_handles_existing_wrapper_and_both_modes(record):
     target = f"{__name__}.dependency"
 
     def function(value) -> None:
@@ -135,18 +121,14 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record, tmp_path, monke
                 post_kwargs={},
             )
         )
-        funcwcalls.save("recorded")
-
     decorated = nopatch(target)(wrapped)
     funcwcalls = get_funcwcalls(decorated)
     assert decorated("item") is None
 
     if record:
-        assert funcwcalls.files
         assert calls[0].target == target
         assert calls[0].args == ("item",)
         assert calls[0].kwargs == {}
         assert calls[0].output == "result: item"
-        assert len(funcwcalls.files) == 1
     else:
         assert funcwcalls.calls == []

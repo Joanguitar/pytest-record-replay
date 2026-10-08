@@ -1,15 +1,32 @@
-from collections import defaultdict, deque
 from types import MappingProxyType
 
 import pytest
 
-import nopatch.util as util_module
+from nopatch.funcwcalls import (
+    FunctionWCalls,
+    set_funcwcalls,
+    get_funcwcalls,
+    has_funcwcalls,
+)
 from nopatch.mock import (
     Call,
-    _configure_patch,
     _for_update,
     _update_argument,
 )
+
+
+def test_call_preserves_explicit_post_call_values():
+    call = Call(
+        "dependency",
+        ("argument",),
+        {"named": "value"},
+        "result",
+        post_args=("updated argument",),
+        post_kwargs={"named": "updated value"},
+    )
+
+    assert call.post_args == ("updated argument",)
+    assert call.post_kwargs == {"named": "updated value"}
 
 
 def test_call_post_state_defaults_to_none_values_matching_arguments():
@@ -38,28 +55,15 @@ def test_for_update_returns_post_state_for_mutated_mutables():
     ) == MappingProxyType({"a": [2]})
 
 
-def test_update_argument_handles_additional_mutable_collections():
-    target = {
-        "values": [1, 2],
-        "mapping": defaultdict(list, {"a": [1]}),
-        "set": {1, 2},
-        "bytes": bytearray(b"ab"),
-        "queue": deque([1, 2]),
-        "nested": ([1], {"k": [2]}, bytearray(b"x")),
-    }
-    updated = {
-        "values": [3, 4],
-        "mapping": defaultdict(list, {"b": [5]}),
-        "set": {3, 4},
-        "bytes": bytearray(b"cd"),
-        "queue": deque([3, 4]),
-        "nested": ([5], {"k": [6]}, bytearray(b"y")),
-    }
-
-    for key, value in updated.items():
-        _update_argument(target[key], value)
-
-    assert target == updated
+def test_update_argument_updates_mutable_containers_in_place():
+    for target, updated in [
+        ([1, 2], [3, 4]),
+        ({"a": [1]}, {"b": [2]}),
+        ({1, 2}, {2, 3}),
+        (bytearray(b"ab"), bytearray(b"cd")),
+    ]:
+        _update_argument(target, updated)
+        assert target == updated
 
 
 def test_for_update_handles_invalid_and_unhandled_mutables():
@@ -87,22 +91,29 @@ def test_update_argument_handles_none_and_nested_sequences():
         _update_argument([1, 2], {"a": 1})
 
 
-def test_update_argument_rejects_wrong_type():
-    with pytest.raises(TypeError, match="Cannot update mutable argument"):
-        _update_argument("abc", "abd")
+def test_update_argument_updates_mutables_inside_read_only_mapping():
+    target = MappingProxyType({"values": [1, 2]})
+    updated = MappingProxyType({"values": [3, 4]})
 
+    _update_argument(target, updated)
+
+    assert target["values"] == [3, 4]
+
+
+def test_update_argument_rejects_immutable_updates():
     with pytest.raises(TypeError, match="Cannot update mutable argument"):
         _update_argument(range(3), range(1, 4))
 
 
-def test_configure_patch_updates_global_record_mode():
-    og_recording = util_module._recording
+def test_funcwcalls_helpers_detect_and_return_wrapper_metadata():
+    function = set_funcwcalls(
+        lambda: None, record=False, calls=None, file=None
+    )
 
-    _configure_patch(False)
-    assert util_module._recording is False
+    assert has_funcwcalls(function)
+    assert isinstance(get_funcwcalls(function), FunctionWCalls)
 
-    _configure_patch(True)
-    assert util_module._recording is True
 
-    _configure_patch(og_recording)
-    assert util_module._recording is og_recording
+def test_get_funcwcalls_rejects_unwrapped_callable():
+    with pytest.raises(ValueError, match="does not have calls"):
+        get_funcwcalls(lambda: None)

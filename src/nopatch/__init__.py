@@ -1,4 +1,8 @@
-"""Record/recall helpers for pytest."""
+"""Record and replay dependency calls in pytest tests.
+
+The public classes and helpers are imported lazily to keep package import
+lightweight. They are available directly from :mod:`nopatch`.
+"""
 
 from importlib import import_module
 
@@ -19,6 +23,11 @@ __all__ = [v for vs in ___imports.values() for v in vs]  # pyright: ignore[repor
 
 
 def __getattr__(name):
+    """Load a public API symbol from the module that defines it.
+
+    Raises:
+        AttributeError: If ``name`` is not part of the public API.
+    """
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     for key, value in ___imports.items():

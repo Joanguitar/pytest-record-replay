@@ -1,20 +1,26 @@
+"""Track test-function calls and persist or replay dependency histories."""
 
 from functools import wraps
 import inspect
 from pathlib import Path
 from typing import Any, Callable, Generic, List, Literal, Optional, overload
 import unittest
-from unittest.mock import patch
 import warnings
 
 import dill
 
 from nopatch.typing import Call, P, R
-from nopatch.util import recording, timestamp
+from nopatch.util import timestamp
 
 
 class FunctionWCalls(Generic[P, R]):
-    """Wrap a test function to have calls attribute."""
+    """Wrap a test function with recording, replay, and call-file management.
+
+    In recording mode, the wrapped function runs and its patched calls are
+    saved. In replay mode, saved calls are consumed while the function runs.
+    Call data may be supplied directly, loaded from ``file``, or discovered
+    from this function's default recordings directory.
+    """
 
     @overload
     def __new__(
@@ -74,6 +80,17 @@ class FunctionWCalls(Generic[P, R]):
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
     ):
+        """Initialize call tracking for ``function``.
+
+        Args:
+            function: Test function to invoke while recording or replaying.
+            record: If true, save new calls; otherwise replay saved calls.
+            calls: Optional call history shared with patched dependency mocks.
+            file: Optional explicit recording file.
+
+        Raises:
+            ValueError: If recording is requested with a nonempty call history.
+        """
         self.func = function
         self.record: bool = record
         self.calls: List[Call] = calls if calls is not None else []
@@ -85,12 +102,14 @@ class FunctionWCalls(Generic[P, R]):
         self.file = file
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        """Invoke the wrapped function in the configured mode."""
         if self.record:
             return self._call_record(*args, **kwargs)
         else:
             return self._call_recall(*args, **kwargs)
 
     def _call_record(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        """Run the function and persist calls made by patched dependencies."""
         assert len(self.calls) == 0, "Calls should be empty before recording."
         output = self.func(*args, **kwargs)
         if self.file is None:
@@ -100,6 +119,7 @@ class FunctionWCalls(Generic[P, R]):
         return output
 
     def _call_recall(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        """Replay from in-memory calls, an explicit file, or saved files."""
         if len(self.calls) > 0:
             return self._call_recall_calls(*args, **kwargs)
         if self.file is not None:
@@ -109,6 +129,7 @@ class FunctionWCalls(Generic[P, R]):
     def _call_recall_calls(
         self, *args: P.args, **kwargs: P.kwargs
     ) -> R:
+        """Run the function against in-memory calls and require full consumption."""
         output = self.func(*args, **kwargs)
         assert len(self.calls) == 0, (
             f"Unconsumed calls remain after replaying {self.calls}."
@@ -118,6 +139,7 @@ class FunctionWCalls(Generic[P, R]):
     def _call_recall_file(
         self, *args: P.args, **kwargs: P.kwargs
     ) -> R:
+        """Load the configured call file, then replay its calls."""
         assert self.file is not None
         self._load_file(self.file)
         return self._call_recall_calls(*args, **kwargs)
@@ -125,6 +147,7 @@ class FunctionWCalls(Generic[P, R]):
     def _call_recall_files(
         self, *args: P.args, **kwargs: P.kwargs
     ) -> R:  # type: ignore
+        """Replay each saved call file in sorted order."""
         files = self.files
         assert len(files) > 0, "No recorded calls found."
         for ii, file in enumerate(files):
@@ -134,7 +157,11 @@ class FunctionWCalls(Generic[P, R]):
             self._call_recall_calls(*args, **kwargs)
 
     def _TestCaseReset(self) -> bool:
-        """Calls tearDown/setUp method if the function is a method of a TestCase."""
+        """Reset a bound ``unittest.TestCase`` between recording files.
+
+        Returns:
+            Whether the wrapped function belongs to a ``TestCase`` instance.
+        """
         if hasattr(self.func, "__self__"):
             testcase = self.func.__self__  # type: ignore
             if isinstance(testcase, unittest.TestCase):
@@ -145,7 +172,7 @@ class FunctionWCalls(Generic[P, R]):
 
     @property
     def path(self) -> Path:
-        """Return a file unique to the function."""
+        """Return the directory used for this function's saved call files."""
         function = inspect.unwrap(self.func)
         path = Path(inspect.getfile(function))
         path = path.parent / "resources_nopatch" / path.stem
@@ -157,29 +184,30 @@ class FunctionWCalls(Generic[P, R]):
 
     @property
     def files(self) -> List[Path]:
-        """Return a list of files containing the calls."""
+        """Return sorted pickle files in this function's recording directory."""
         return sorted(self.path.glob("*.pkl"))
 
     def _save_file(self, file: Path):
-        """Save the calls to a file."""
-        self.path.mkdir(parents=True, exist_ok=True)
+        """Create the recording directory and serialize calls to ``file``."""
+        file.parent.mkdir(parents=True, exist_ok=True)
         with open(file, "wb") as f:
             dill.dump(self.calls, f)
 
     def _load_file(self, file: Path):
-        """Load the calls from a file."""
+        """Replace the in-memory call list with calls loaded from ``file``."""
         with open(file, "rb") as f:
             calls_data = dill.load(f)
             self.calls.clear()
             self.calls.extend(calls_data)
 
     def save(self, name: str):
-        """Save the calls to a file."""
+        """Save calls in the default directory under ``name`` with a pickle suffix."""
         file = self.path / (name + ".pkl")
         self._save_file(file)
 
 
 def has_funcwcalls(func: Callable) -> bool:
+    """Return whether ``func`` has nopatch ``FunctionWCalls`` metadata."""
     return hasattr(func, "function_with_calls") and isinstance(
         func.function_with_calls,  # type: ignore
         FunctionWCalls,
@@ -187,17 +215,23 @@ def has_funcwcalls(func: Callable) -> bool:
 
 
 def get_funcwcalls(func: Callable) -> FunctionWCalls:
+    """Return nopatch metadata attached to ``func``.
+
+    Raises:
+        ValueError: If ``func`` has no nopatch call metadata.
+    """
     if not has_funcwcalls(func):
         raise ValueError("Function does not have calls.")
     return func.function_with_calls  # type: ignore
 
 
-def _set_patched_func(
+def set_funcwcalls(
     func: Callable[P, Optional[R]],
     record: bool,
     calls: Optional[List[Call]],
     file: Optional[Path],
 ) -> Callable[P, Optional[R]]:
+    """Attach a ``FunctionWCalls`` wrapper while preserving function metadata."""
     function_with_calls = wraps(func)(
         FunctionWCalls(func, record=record, calls=calls, file=file)
     )

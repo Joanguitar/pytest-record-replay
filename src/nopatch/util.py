@@ -1,4 +1,4 @@
-
+"""Internal recording state and mutable-argument replay helpers."""
 
 from collections.abc import Mapping, MutableMapping, MutableSequence, MutableSet, Sequence
 from datetime import datetime
@@ -14,17 +14,27 @@ timestamp = datetime.now().isoformat().replace(":", "-")
 
 
 def recording() -> bool:
+    """Return whether the current pytest run is recording calls."""
     return _recording
 
 
 def _configure_patch(record: bool):
-    """Configure the patching behavior for the current test session."""
+    """Set recording mode for wrappers created during this test session."""
     global _recording
     _recording = record
 
 
 def _for_update(arg: R, rarg: R) -> Optional[R]:
-    """Return the post-call argument for updating mutable arguments."""
+    """Describe how to restore ``arg`` to its post-call value ``rarg``.
+
+    Returns ``None`` when the value is unchanged; for mutable containers,
+    returns a copy of the replacement state. Nested immutable containers are
+    rebuilt with updates for any mutable values they contain.
+
+    Raises:
+        TypeError: If the values have different types or cannot be updated.
+        ValueError: If the argument cannot be serialized with dill.
+    """
     if type(arg) != type(rarg):
         raise TypeError(
             f"Cannot update mutable argument of type {type(arg).__name__} with {type(rarg).__name__}."
@@ -43,7 +53,15 @@ def _for_update(arg: R, rarg: R) -> Optional[R]:
 
 
 def _update_argument(target: R, updated: Optional[R]) -> None:
-    """Restore any in-place mutations captured after a recorded call."""
+    """Apply captured post-call state to a replayed argument in place.
+
+    ``None`` indicates that the value was unchanged. Mutable containers are
+    updated directly, while immutable containers are traversed to update any
+    mutable values nested inside them.
+
+    Raises:
+        TypeError: If the saved state has a different type or cannot be applied.
+    """
     if updated is None:
         return
     if type(target) != type(updated):
