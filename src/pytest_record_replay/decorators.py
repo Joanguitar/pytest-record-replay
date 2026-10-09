@@ -1,9 +1,8 @@
 """Decorators for recording and replaying patched dependencies."""
 
-from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Optional, Union, overload
+from typing import Callable, Optional, Union, overload
 from unittest.mock import patch
 
 from pytest_record_replay.funcwcalls import (
