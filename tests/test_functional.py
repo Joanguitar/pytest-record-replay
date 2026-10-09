@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from pytest_replay.decorators import set_replay, patch_replay, recording
+from pytest_record_replay.decorators import set_replay, patch_replay, recording
 
 
 run_count = {
@@ -43,7 +43,7 @@ def test_multiple_functions_are_recorded():
         assert value == run_count_old[key] + recording()
 
 
-@patch("pytest_replay.funcwcalls.FunctionWCalls._save")  # Don't actually save
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save")  # Don't actually save
 def test_recording_will_always_save(mock_save: Mock):
     @patch_replay(f"{__name__}.multiply")
     @patch_replay(f"{__name__}.describe")

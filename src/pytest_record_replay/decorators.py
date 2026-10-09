@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Optional, Union, overload
 from unittest.mock import patch
 
-from pytest_replay.funcwcalls import (
+from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
     set_funcwcalls,
     get_funcwcalls,
     has_funcwcalls,
 )
-from pytest_replay.mock import MockRBase, MockReplay, MockRecord
-from pytest_replay.typing import P, R
-from pytest_replay.util import recording
+from pytest_record_replay.mock import MockRBase, MockReplay, MockRecord
+from pytest_record_replay.typing import P, R
+from pytest_record_replay.util import recording
 
 
 def set_replay(
@@ -43,7 +43,9 @@ def set_replay(
             raise AttributeError(
                 "@set_replay should be applied before any @patch_replay decorator."
             )
-        patched_func = patch("pytest_replay.util.recording", lambda: record)(func)
+        patched_func = patch("pytest_record_replay.util.recording", lambda: record)(
+            func
+        )
         return set_funcwcalls(patched_func, record=record, calls=None, file=file)
 
     return wrapper

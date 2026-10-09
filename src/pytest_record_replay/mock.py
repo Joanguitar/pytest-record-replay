@@ -10,8 +10,8 @@ from unittest.mock import Mock
 
 import dill
 
-from pytest_replay.typing import Call
-from pytest_replay.util import _for_update, _update_argument
+from pytest_record_replay.typing import Call
+from pytest_record_replay.util import _for_update, _update_argument
 
 
 class MockRBase(ABC, Mock):

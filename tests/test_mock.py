@@ -1,6 +1,6 @@
 import pytest
 
-from pytest_replay.mock import MockReplay, MockRecord
+from pytest_record_replay.mock import MockReplay, MockRecord
 
 
 def identity(value=None):

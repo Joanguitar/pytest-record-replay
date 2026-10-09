@@ -3,11 +3,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pytest_replay.mock import MockReplay
-from pytest_replay.decorators import patcher_replay, patch_replay, set_replay
-import pytest_replay.util as util_module
-from pytest_replay.typing import Call
-from pytest_replay.funcwcalls import FunctionWCalls, get_funcwcalls
+from pytest_record_replay.mock import MockReplay
+from pytest_record_replay.decorators import patcher_replay, patch_replay, set_replay
+import pytest_record_replay.util as util_module
+from pytest_record_replay.typing import Call
+from pytest_record_replay.funcwcalls import FunctionWCalls, get_funcwcalls
 
 
 def identity(value=None) -> None:
@@ -64,7 +64,7 @@ def test_replay_patch_preserves_existing_functionwcalls_metadata(
     assert callable(patched.func)
 
 
-@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_replay_records_bound_method_without_receiver(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
     target = f"{__name__}.MethodDependency.value"
@@ -100,7 +100,7 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
 
 
 @pytest.mark.parametrize("record", [False, True])
-@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_replay_handles_existing_wrapper_and_both_modes(record):
     target = f"{__name__}.dependency"
 

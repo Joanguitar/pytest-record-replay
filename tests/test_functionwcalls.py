@@ -4,13 +4,13 @@ from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
-from pytest_replay.util import timestamp
-from pytest_replay.mock import (
+from pytest_record_replay.util import timestamp
+from pytest_record_replay.mock import (
     MockReplay,
     Call,
 )
-from pytest_replay.funcwcalls import FunctionWCalls
-from pytest_replay.decorators import replay_mock
+from pytest_record_replay.funcwcalls import FunctionWCalls
+from pytest_record_replay.decorators import replay_mock
 
 
 def test_timestamp_is_safe_for_windows_paths():
@@ -66,7 +66,7 @@ def patch_both(funcwcalls: FunctionWCalls):
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_function_wrapper_records_call(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
@@ -79,7 +79,7 @@ def test_function_wrapper_records_call(value):
 @pytest.mark.parametrize(
     "value", ["value", None, 0, 3.14, [1, 2], {"a": 1, "b": 2}, (1, 2)]
 )
-@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_function_wrapper_records_calls(value):
     funcwcalls = FunctionWCalls(call_funcs, record=True)
 
@@ -156,7 +156,7 @@ def test_call_record_requires_empty_calls():
         funcwcalls._call_record()
 
 
-@patch("pytest_replay.funcwcalls.FunctionWCalls.save")
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls.save")
 def test_call_record_saves_calls(save_mock):
     funcwcalls = FunctionWCalls(call_funcs)
 
@@ -167,7 +167,7 @@ def test_call_record_saves_calls(save_mock):
 
 
 @patch(
-    "pytest_replay.funcwcalls.FunctionWCalls.files",
+    "pytest_record_replay.funcwcalls.FunctionWCalls.files",
     new_callable=PropertyMock,
     return_value=[],
 )

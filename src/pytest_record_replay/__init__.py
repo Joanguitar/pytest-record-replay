@@ -1,7 +1,7 @@
 """Record and replay dependency calls in pytest tests.
 
 The public classes and helpers are imported lazily to keep package import
-lightweight. They are available directly from :mod:`pytest_replay`.
+lightweight. They are available directly from :mod:`pytest_record_replay`.
 """
 
 from importlib import import_module

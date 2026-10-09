@@ -1,16 +1,16 @@
-# pytest-replay
+# pytest-record-replay
 
-`pytest-replay` records calls to dependencies during a test run, then replays
+`pytest-record-replay` records calls to dependencies during a test run, then replays
 those calls on later runs. Use it to test code that depends on services or
 other external behavior without calling those dependencies every time.
 
 ## Install
 
 ```bash
-python -m pip install pytest-replay
+python -m pip install pytest-record-replay
 ```
 
-After installation, pytest loads the pytest-replay plugin automatically. Use
+After installation, pytest loads the pytest-record-replay plugin automatically. Use
 `pytest --record` to record dependency calls. Run `pytest` without that option
 to replay them.
 
@@ -27,7 +27,7 @@ it uses. The name should refer to where the dependency is looked up by the code
 under test.
 
 ```python
-from pytest_replay import patch_replay
+from pytest_record_replay import patch_replay
 from myapp import client
 
 
@@ -36,7 +36,7 @@ def test_fetch_data():
     assert client.fetch_data("item-1") == {"id": "item-1"}
 ```
 
-When recording, `fetch_data` runs normally and pytest-replay saves its inputs
+When recording, `fetch_data` runs normally and pytest-record-replay saves its inputs
 and output. On replay, it returns the saved output and checks that the inputs
 match. Apply `@patch_replay` more than once to record or replay multiple
 dependencies:
@@ -57,7 +57,7 @@ when composing another test wrapper with `@patch_replay`.
 
 ```python
 from pathlib import Path
-from pytest_replay import patch_replay, set_replay
+from pytest_record_replay import patch_replay, set_replay
 from myapp import client
 
 
@@ -77,7 +77,7 @@ Use `recording()` in Python code or request pytest's `replay_recording`
 fixture in a test. Both report whether the current run is in recording mode.
 
 ```python
-from pytest_replay import recording
+from pytest_record_replay import recording
 
 
 def test_result():

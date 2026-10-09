@@ -11,8 +11,8 @@ import warnings
 
 import dill
 
-from pytest_replay.typing import Call, P, R
-from pytest_replay.util import timestamp
+from pytest_record_replay.typing import Call, P, R
+from pytest_record_replay.util import timestamp
 
 
 class FunctionWCalls(Generic[P, R]):
@@ -171,7 +171,7 @@ class FunctionWCalls(Generic[P, R]):
         """Return the directory used for this function's saved call files."""
         function = inspect.unwrap(self.func)
         path = Path(inspect.getfile(function))
-        path = path.parent / "resources_pytest_replay" / path.stem
+        path = path.parent / "resources_pytest_record_replay" / path.stem
         # If the function is a method, include the class name in the file path
         if inspect.ismethod(function):
             path = path / function.__self__.__class__.__name__
