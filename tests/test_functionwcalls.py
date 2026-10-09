@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from pathlib import Path
 import unittest
 from unittest.mock import Mock, PropertyMock, patch
 
@@ -7,7 +6,7 @@ import pytest
 
 from pytest_replay.util import timestamp
 from pytest_replay.mock import (
-    ReplayMock,
+    MockReplay,
     Call,
 )
 from pytest_replay.funcwcalls import FunctionWCalls
@@ -196,7 +195,7 @@ def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
 
         def run_case(self):
             call = funcwcalls.calls[0]
-            output = ReplayMock(call.target, calls=funcwcalls.calls)()
+            output = MockReplay(call.target, calls=funcwcalls.calls)()
             events.append((self._testMethodName, output))
             return output
 

@@ -20,55 +20,56 @@ To install a local checkout for development, including the test dependencies:
 python -m pip install -e ".[test]"
 ```
 
-## `@replay`
+## `@patch_replay`
 
-Import `replay` and decorate a test with the dotted name of the dependency it
-uses. The name should refer to where the dependency is looked up by the code
+Import `patch_replay` and decorate a test with the dotted name of the dependency
+it uses. The name should refer to where the dependency is looked up by the code
 under test.
 
 ```python
-from pytest_replay import replay
+from pytest_replay import patch_replay
 from myapp import client
 
 
-@replay("myapp.client.fetch_data")
+@patch_replay("myapp.client.fetch_data")
 def test_fetch_data():
     assert client.fetch_data("item-1") == {"id": "item-1"}
 ```
 
 When recording, `fetch_data` runs normally and pytest-replay saves its inputs
 and output. On replay, it returns the saved output and checks that the inputs
-match. Apply `@replay` more than once to record or replay multiple dependencies:
+match. Apply `@patch_replay` more than once to record or replay multiple
+dependencies:
 
 ```python
-@replay("myapp.client.fetch_data")
-@replay("myapp.clock.now")
+@patch_replay("myapp.client.fetch_data")
+@patch_replay("myapp.clock.now")
 def test_report():
     ...
 ```
 
-## `@nodecorator`
+## `@set_replay`
 
-Use `@nodecorator` when composing a test wrapper with `@replay`. It adds
-recording/replay metadata to the test without patching a dependency itself.
-Specify `record` or `file` here to override the default mode or choose a
-recording file for that test.
+Use `@set_replay` to configure recording/replay metadata on a test without
+patching a dependency itself. Specify `record` or `file` to override the
+current pytest mode or choose a recording file for that test. It is also useful
+when composing another test wrapper with `@patch_replay`.
 
 ```python
 from pathlib import Path
-from pytest_replay import nodecorator, replay
+from pytest_replay import patch_replay, set_replay
 from myapp import client
 
 
-@replay("myapp.client.fetch_data")
-@nodecorator(record=True, file=Path("test-data/fetch.pkl"))
+@patch_replay("myapp.client.fetch_data")
+@set_replay(record=True, file=Path("test-data/fetch.pkl"))
 def test_fetch():
     assert client.fetch_data("item-1") == {"id": "item-1"}
 ```
 
-If `record` is omitted, `nodecorator` uses the current pytest mode: recording
+If `record` is omitted, `set_replay` uses the current pytest mode: recording
 with `--record`, replaying without it. When using both decorators, place
-`@nodecorator` closest to the function so it is applied before `@replay`.
+`@set_replay` closest to the function so it is applied before `@patch_replay`.
 
 ## Check recording mode
 

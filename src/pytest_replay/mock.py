@@ -14,7 +14,7 @@ from pytest_replay.typing import Call
 from pytest_replay.util import _for_update, _update_argument
 
 
-class ReplayMockBase(ABC, Mock):
+class MockRBase(ABC, Mock):
     """Base mock that shares a call list and supports method descriptor binding.
 
     Subclasses implement ``_execute_mock_call`` to either invoke and record the
@@ -33,16 +33,16 @@ class ReplayMockBase(ABC, Mock):
         """Bind a recorder to an instance method or return a replay descriptor."""
         if instance is None:
             return self
-        if isinstance(self, RecordingMock):
+        if isinstance(self, MockRecord):
             function = self.function.__get__(instance, owner)
-            return RecordingMock(self._target, function, calls=self._calls)
-        return ReplayMock(self._target, calls=self._calls)
+            return MockRecord(self._target, function, calls=self._calls)
+        return MockReplay(self._target, calls=self._calls)
 
     @abstractmethod
     def _execute_mock_call(self, /, *args, **kwargs): ...
 
 
-class RecordingMock(ReplayMockBase):
+class MockRecord(MockRBase):
     """Invoke an original callable and append a serializable call record."""
 
     def __init__(
@@ -93,7 +93,7 @@ class RecordingMock(ReplayMockBase):
         return output
 
 
-class ReplayMock(ReplayMockBase):
+class MockReplay(MockRBase):
     """Replay saved outputs while validating inputs and restoring mutations."""
 
     def __init__(

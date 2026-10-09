@@ -41,7 +41,7 @@ def _for_update(arg: R, rarg: R) -> Optional[R]:
         TypeError: If the values have different types or cannot be updated.
         ValueError: If the argument cannot be serialized with dill.
     """
-    if type(arg) != type(rarg):
+    if type(arg) is not type(rarg):
         raise TypeError(
             f"Cannot update mutable argument of type {type(arg).__name__} with {type(rarg).__name__}."
         )
@@ -70,7 +70,7 @@ def _update_argument(target: R, updated: Optional[R]) -> None:
     """
     if updated is None:
         return
-    if type(target) != type(updated):
+    if type(target) is not type(updated):
         raise TypeError(
             f"Cannot update mutable argument of type {type(target).__name__} with {type(updated).__name__}."
         )

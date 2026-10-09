@@ -12,12 +12,12 @@ from pytest_replay.funcwcalls import (
     get_funcwcalls,
     has_funcwcalls,
 )
-from pytest_replay.mock import ReplayMockBase, ReplayMock, RecordingMock
+from pytest_replay.mock import MockRBase, MockReplay, MockRecord
 from pytest_replay.typing import P, R
 from pytest_replay.util import recording
 
 
-def nodecorator(
+def set_replay(
     record: Optional[bool] = None, file: Optional[Path] = None
 ) -> Callable[[Callable[P, R]], Callable[P, Optional[R]]]:
     """Wrap a function with replay call tracking, without patching a dependency.
@@ -41,7 +41,7 @@ def nodecorator(
     ) -> Callable[P, Optional[R]]:
         if has_funcwcalls(func):
             raise AttributeError(
-                "@nodecorator should be applied before any @replay decorator."
+                "@set_replay should be applied before any @patch_replay decorator."
             )
         patched_func = patch("pytest_replay.util.recording", lambda: record)(func)
         return set_funcwcalls(patched_func, record=record, calls=None, file=file)
@@ -49,7 +49,7 @@ def nodecorator(
     return wrapper
 
 
-def replay_mock(target: str, funcwcalls: FunctionWCalls) -> ReplayMockBase:
+def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockRBase:
     """Create the mock used to record or replay calls to a patched target.
 
     The mock type is selected from ``funcwcalls.record`` and shares its call
@@ -62,19 +62,19 @@ def replay_mock(target: str, funcwcalls: FunctionWCalls) -> ReplayMockBase:
     calls = funcwcalls.calls
     if funcwcalls.record:
         original_func, _ = patch(target).get_original()
-        return RecordingMock(target, original_func, calls=calls)
-    return ReplayMock(target, calls=calls)
+        return MockRecord(target, original_func, calls=calls)
+    return MockReplay(target, calls=calls)
 
 
 @overload
-def replay_patch(func: FunctionWCalls[P, R], target: str) -> FunctionWCalls[P, R]: ...
+def patcher_replay(func: FunctionWCalls[P, R], target: str) -> FunctionWCalls[P, R]: ...
 @overload
-def replay_patch(
+def patcher_replay(
     func: Callable[P, Optional[R]], target: str
 ) -> Callable[P, Optional[R]]: ...
 
 
-def replay_patch(
+def patcher_replay(
     func: Union[Callable[P, Optional[R]], FunctionWCalls[P, R]],
     target: str,
 ) -> Union[Callable[P, Optional[R]], FunctionWCalls[P, R]]:
@@ -96,7 +96,7 @@ def replay_patch(
         function_with_calls: FunctionWCalls = func
     else:
         if not has_funcwcalls(func):
-            func = nodecorator()(func)
+            func = set_replay()(func)
         function_with_calls = get_funcwcalls(func)
 
     wrapped_func = function_with_calls.func
@@ -111,7 +111,7 @@ def replay_patch(
     return set_funcwcalls(patched_func, record=record, calls=calls, file=file)
 
 
-def replay(target: str):
+def patch_replay(target: str):
     """Return a decorator that records or replays calls to a dependency.
 
     Args:
@@ -120,4 +120,4 @@ def replay(target: str):
     Returns:
         A decorator suitable for applying directly to a test function.
     """
-    return partial(replay_patch, target=target)
+    return partial(patcher_replay, target=target)

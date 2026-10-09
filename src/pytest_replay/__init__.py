@@ -9,14 +9,8 @@ from importlib import import_module
 __version__ = "0.1.0"
 
 ___imports = {
-    ".mock": [
-        "ReplayMockBase",
-        "RecordingMock",
-        "ReplayMock",
-    ],
     ".util": ["recording"],
-    ".decorators": ["replay", "nodecorator"],
-    ".funcwcalls": ["has_funcwcalls", "get_funcwcalls"],
+    ".decorators": ["patch_replay", "set_replay", "patcher_replay"],
 }
 
 __all__ = [v for vs in ___imports.values() for v in vs]  # pyright: ignore[reportUnsupportedDunderAll]

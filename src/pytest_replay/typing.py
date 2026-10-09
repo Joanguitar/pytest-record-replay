@@ -10,7 +10,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-@dataclass(frozen=True)
+@dataclass()
 class Call:
     """One invocation of a patched callable and its captured post-call state.
 
