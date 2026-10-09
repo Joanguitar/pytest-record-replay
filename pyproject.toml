@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nopatch"
+name = "pytest-replay"
 dynamic = ["version"]
 description = "Record and recall behavior in pytest tests"
 readme = "README.md"
@@ -36,15 +36,15 @@ dependencies = [
 test = ["pytest-cov>=4"]
 
 [project.urls]
-Homepage = "https://github.com/Joanguitar/nopatch"
-Repository = "https://github.com/Joanguitar/nopatch"
-Issues = "https://github.com/Joanguitar/nopatch/issues"
+Homepage = "https://github.com/Joanguitar/pytest-replay"
+Repository = "https://github.com/Joanguitar/pytest-replay"
+Issues = "https://github.com/Joanguitar/pytest-replay/issues"
 
 [project.entry-points.pytest11]
-"nopatch.pytest_plugin" = "nopatch.pytest_plugin"
+"pytest_replay.pytest_plugin" = "pytest_replay.pytest_plugin"
 
 [tool.setuptools.dynamic]
-version = { attr = "nopatch.__version__" }
+version = { attr = "pytest_replay.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -52,7 +52,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-    "--cov=nopatch",
+    "--cov=pytest_replay",
     "--cov-branch",
     "--cov-report=term-missing",
     "--cov-report=html:coverage",
@@ -60,6 +60,6 @@ addopts = [
 
 [tool.coverage.run]
 omit = [
-    "src/nopatch/__init__.py",
-    "src/nopatch/pytest_plugin.py",
+    "src/pytest_replay/__init__.py",
+    "src/pytest_replay/pytest_plugin.py",
 ]

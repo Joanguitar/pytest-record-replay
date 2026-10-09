@@ -10,11 +10,11 @@ from unittest.mock import Mock
 
 import dill
 
-from nopatch.typing import Call
-from nopatch.util import _for_update, _update_argument
+from pytest_replay.typing import Call
+from pytest_replay.util import _for_update, _update_argument
 
 
-class NoMockBase(ABC, Mock):
+class ReplayMockBase(ABC, Mock):
     """Base mock that shares a call list and supports method descriptor binding.
 
     Subclasses implement ``_execute_mock_call`` to either invoke and record the
@@ -33,16 +33,16 @@ class NoMockBase(ABC, Mock):
         """Bind a recorder to an instance method or return a replay descriptor."""
         if instance is None:
             return self
-        if isinstance(self, NoMockRecord):
+        if isinstance(self, RecordingMock):
             function = self.function.__get__(instance, owner)
-            return NoMockRecord(self._target, function, calls=self._calls)
-        return NoMockRecall(self._target, calls=self._calls)
+            return RecordingMock(self._target, function, calls=self._calls)
+        return ReplayMock(self._target, calls=self._calls)
 
     @abstractmethod
     def _execute_mock_call(self, /, *args, **kwargs): ...
 
 
-class NoMockRecord(NoMockBase):
+class RecordingMock(ReplayMockBase):
     """Invoke an original callable and append a serializable call record."""
 
     def __init__(
@@ -93,7 +93,7 @@ class NoMockRecord(NoMockBase):
         return output
 
 
-class NoMockRecall(NoMockBase):
+class ReplayMock(ReplayMockBase):
     """Replay saved outputs while validating inputs and restoring mutations."""
 
     def __init__(

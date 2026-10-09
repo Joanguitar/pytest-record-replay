@@ -1,5 +1,7 @@
 """Track test-function calls and persist or replay dependency histories."""
 
+from __future__ import annotations
+
 from functools import wraps
 import inspect
 from pathlib import Path
@@ -9,8 +11,8 @@ import warnings
 
 import dill
 
-from nopatch.typing import Call, P, R
-from nopatch.util import timestamp
+from pytest_replay.typing import Call, P, R
+from pytest_replay.util import timestamp
 
 
 class FunctionWCalls(Generic[P, R]):
@@ -169,7 +171,7 @@ class FunctionWCalls(Generic[P, R]):
         """Return the directory used for this function's saved call files."""
         function = inspect.unwrap(self.func)
         path = Path(inspect.getfile(function))
-        path = path.parent / "resources_nopatch" / path.stem
+        path = path.parent / "resources_pytest_replay" / path.stem
         # If the function is a method, include the class name in the file path
         if inspect.ismethod(function):
             path = path / function.__self__.__class__.__name__
@@ -201,7 +203,7 @@ class FunctionWCalls(Generic[P, R]):
 
 
 def has_funcwcalls(func: Callable) -> bool:
-    """Return whether ``func`` has nopatch ``FunctionWCalls`` metadata."""
+    """Return whether ``func`` has replay ``FunctionWCalls`` metadata."""
     return hasattr(func, "function_with_calls") and isinstance(
         func.function_with_calls,  # type: ignore
         FunctionWCalls,
@@ -209,10 +211,10 @@ def has_funcwcalls(func: Callable) -> bool:
 
 
 def get_funcwcalls(func: Callable) -> FunctionWCalls:
-    """Return nopatch metadata attached to ``func``.
+    """Return replay metadata attached to ``func``.
 
     Raises:
-        ValueError: If ``func`` has no nopatch call metadata.
+        ValueError: If ``func`` has no replay call metadata.
     """
     if not has_funcwcalls(func):
         raise ValueError("Function does not have calls.")

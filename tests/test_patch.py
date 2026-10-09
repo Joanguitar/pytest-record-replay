@@ -3,12 +3,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from nopatch.decorators import nodecorator, nopatch, nopatcher
-from nopatch.mock import NoMockRecall
-import nopatch.util as util_module
-from nopatch.typing import Call
-from nopatch.util import recording
-from nopatch.funcwcalls import FunctionWCalls, get_funcwcalls
+from pytest_replay.decorators import nodecorator, replay, replay_patch
+from pytest_replay.mock import ReplayMock
+import pytest_replay.util as util_module
+from pytest_replay.typing import Call
+from pytest_replay.util import recording
+from pytest_replay.funcwcalls import FunctionWCalls, get_funcwcalls
 
 
 def identity(value=None) -> None:
@@ -49,12 +49,14 @@ def test_nodecorator_rejects_an_already_wrapped_function():
 
 @pytest.mark.parametrize("record", [True, False])
 @pytest.mark.parametrize("file", [None, Path("path/to/file.pkl")])
-def test_nopatcher_preserves_existing_functionwcalls_metadata(record: bool, file: Path):
+def test_replay_patch_preserves_existing_functionwcalls_metadata(
+    record: bool, file: Path
+):
     target = f"{__name__}.dependency"
     wrapped = nodecorator(record=record, file=file)(dependency)
     function_with_calls = get_funcwcalls(wrapped)
 
-    patched = nopatcher(function_with_calls, target)
+    patched = replay_patch(function_with_calls, target)
 
     assert isinstance(patched, FunctionWCalls)
     assert patched.record == record
@@ -63,13 +65,13 @@ def test_nopatcher_preserves_existing_functionwcalls_metadata(record: bool, file
     assert callable(patched.func)
 
 
-@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
-def test_nopatch_records_bound_method_without_receiver(monkeypatch):
+@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+def test_replay_records_bound_method_without_receiver(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
     target = f"{__name__}.MethodDependency.value"
     instance = MethodDependency()
 
-    @nopatch(target)
+    @replay(target)
     def call_method(item) -> None:
         instance.value(item)
 
@@ -91,7 +93,7 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
             post_kwargs={},
         )
     ]
-    recall = NoMockRecall(target, calls=calls)
+    recall = ReplayMock(target, calls=calls)
 
     assert recall.__get__(None, MethodDependency) is recall
     bound_recall = recall.__get__(MethodDependency(), MethodDependency)
@@ -99,8 +101,8 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
 
 
 @pytest.mark.parametrize("record", [False, True])
-@patch("nopatch.funcwcalls.FunctionWCalls._save", new=Mock())
-def test_nopatch_handles_existing_wrapper_and_both_modes(record):
+@patch("pytest_replay.funcwcalls.FunctionWCalls._save", new=Mock())
+def test_replay_handles_existing_wrapper_and_both_modes(record):
     target = f"{__name__}.dependency"
 
     def function(value) -> None:
@@ -121,7 +123,7 @@ def test_nopatch_handles_existing_wrapper_and_both_modes(record):
                 post_kwargs={},
             )
         )
-    decorated = nopatch(target)(wrapped)
+    decorated = replay(target)(wrapped)
     funcwcalls = get_funcwcalls(decorated)
     assert decorated("item") is None
 

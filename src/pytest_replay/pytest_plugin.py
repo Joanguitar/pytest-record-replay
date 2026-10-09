@@ -1,4 +1,4 @@
-"""Pytest integration for nopatch."""
+"""Pytest integration for pytest-replay."""
 
 import pytest
 
@@ -9,21 +9,21 @@ def pytest_addoption(parser):
         "--record",
         action="store_true",
         default=False,
-        help="enable recording mode for nopatch tests",
+        help="enable recording mode for pytest-replay tests",
     )
 
 
 def pytest_configure(config):
-    """Set nopatch's recording mode from pytest's ``--record`` option."""
+    """Set pytest-replay's recording mode from pytest's ``--record`` option."""
     record = config.getoption("--record")
-    from nopatch.util import _configure_patch
+    from pytest_replay.util import _configure_patch
 
     _configure_patch(record)
 
 
 @pytest.fixture
-def nopatch_recording():
+def replay_recording():
     """Provide the active recording mode to a test as a boolean."""
-    from nopatch.util import recording
+    from pytest_replay.util import recording
 
     return recording()

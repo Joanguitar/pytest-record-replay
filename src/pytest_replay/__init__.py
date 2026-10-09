@@ -1,7 +1,7 @@
 """Record and replay dependency calls in pytest tests.
 
 The public classes and helpers are imported lazily to keep package import
-lightweight. They are available directly from :mod:`nopatch`.
+lightweight. They are available directly from :mod:`pytest_replay`.
 """
 
 from importlib import import_module
@@ -10,12 +10,12 @@ __version__ = "0.1.0"
 
 ___imports = {
     ".mock": [
-        "NoMockBase",
-        "NoMockRecord",
-        "NoMockRecall",
+        "ReplayMockBase",
+        "RecordingMock",
+        "ReplayMock",
     ],
     ".util": ["recording"],
-    ".decorators": ["nopatch", "nodecorator"],
+    ".decorators": ["replay", "nodecorator"],
     ".funcwcalls": ["has_funcwcalls", "get_funcwcalls"],
 }
 

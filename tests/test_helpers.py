@@ -2,13 +2,13 @@ from types import MappingProxyType
 
 import pytest
 
-from nopatch.funcwcalls import (
+from pytest_replay.funcwcalls import (
     FunctionWCalls,
     set_funcwcalls,
     get_funcwcalls,
     has_funcwcalls,
 )
-from nopatch.mock import (
+from pytest_replay.mock import (
     Call,
     _for_update,
     _update_argument,

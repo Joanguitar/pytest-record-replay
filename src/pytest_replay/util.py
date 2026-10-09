@@ -12,7 +12,7 @@ from typing import Optional
 
 import dill
 
-from nopatch.typing import R
+from pytest_replay.typing import R
 
 
 _recording = False

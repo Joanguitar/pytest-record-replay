@@ -50,7 +50,7 @@ coverage.xml
 *.lcov
 .hypothesis/
 .pytest_cache/
-.nopatch-recordings.pkl
+.pytest-replay-recordings.pkl
 cover/
 
 # Translations

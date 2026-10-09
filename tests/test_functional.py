@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from nopatch.decorators import nodecorator, nopatch, recording
+from pytest_replay.decorators import nodecorator, replay, recording
 
 
 run_count = {
@@ -19,22 +19,22 @@ def describe(name):
     return {"name": name, "active": True}
 
 
-@nopatch(f"{__name__}.multiply")
+@replay(f"{__name__}.multiply")
 def test_multiply_is_recorded():
     run_count_old = run_count.copy()
     assert multiply(21) == 42
     assert run_count["multiply"] == run_count_old["multiply"] + recording()
 
 
-@nopatch(f"{__name__}.describe")
+@replay(f"{__name__}.describe")
 def test_description_is_recorded():
     run_count_old = run_count.copy()
     assert describe("sample") == {"name": "sample", "active": True}
     assert run_count["describe"] == run_count_old["describe"] + recording()
 
 
-@nopatch(f"{__name__}.multiply")
-@nopatch(f"{__name__}.describe")
+@replay(f"{__name__}.multiply")
+@replay(f"{__name__}.describe")
 def test_multiple_functions_are_recorded():
     run_count_old = run_count.copy()
     assert multiply(10) == 20
@@ -43,10 +43,10 @@ def test_multiple_functions_are_recorded():
         assert value == run_count_old[key] + recording()
 
 
-@patch("nopatch.funcwcalls.FunctionWCalls._save")  # Don't actually save
+@patch("pytest_replay.funcwcalls.FunctionWCalls._save")  # Don't actually save
 def test_recording_will_always_save(mock_save: Mock):
-    @nopatch(f"{__name__}.multiply")
-    @nopatch(f"{__name__}.describe")
+    @replay(f"{__name__}.multiply")
+    @replay(f"{__name__}.describe")
     @nodecorator(record=True)
     def same_function():
         assert multiply(10) == 20
