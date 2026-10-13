@@ -23,6 +23,7 @@ class FunctionWCalls(Generic[P, R]):
     Call data may be supplied directly, loaded from ``file``, or discovered
     from this function's default recordings directory.
     """
+
     __module__: str
     __name__: str
     __qualname__: str
@@ -111,9 +112,13 @@ class FunctionWCalls(Generic[P, R]):
         self.file = file
         wraps(function)(self)
 
-    def decorated(self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]) -> FunctionWCalls[P_, R_]:
+    def decorated(
+        self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]
+    ) -> FunctionWCalls[P_, R_]:
         new_func = decorator(self.func)
-        return FunctionWCalls(new_func, record=self.record, calls=self.calls, file=self.file)
+        return FunctionWCalls(
+            new_func, record=self.record, calls=self.calls, file=self.file
+        )
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped function in the configured mode."""

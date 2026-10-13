@@ -2,9 +2,6 @@ from types import MappingProxyType
 
 import pytest
 
-from pytest_record_replay.funcwcalls import (
-    FunctionWCalls,
-)
 from pytest_record_replay.mock import (
     Call,
     _for_update,
