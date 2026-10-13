@@ -1,15 +1,12 @@
 """Decorators for recording and replaying patched dependencies."""
 
-from functools import partial
+from functools import partial, wraps
 from pathlib import Path
-from typing import Callable, Optional, Union, overload
+from typing import Callable, Optional, Union
 from unittest.mock import patch
 
 from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
-    set_funcwcalls,
-    get_funcwcalls,
-    has_funcwcalls,
 )
 from pytest_record_replay.mock import MockRBase, MockReplay, MockRecord
 from pytest_record_replay.typing import P, R
@@ -18,7 +15,7 @@ from pytest_record_replay.util import recording
 
 def set_replay(
     record: Optional[bool] = None, file: Optional[Path] = None
-) -> Callable[[Callable[P, R]], Callable[P, Optional[R]]]:
+) -> Callable[[Callable[P, R]], FunctionWCalls[P, Optional[R]]]:
     """Wrap a function with replay call tracking, without patching a dependency.
 
     Args:
@@ -37,15 +34,16 @@ def set_replay(
 
     def wrapper(
         func: Callable[P, R],
-    ) -> Callable[P, Optional[R]]:
-        if has_funcwcalls(func):
+    ) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
+        if isinstance(func, FunctionWCalls):
             raise AttributeError(
                 "@set_replay should be applied before any @patch_replay decorator."
             )
         patched_func = patch("pytest_record_replay.util.recording", lambda: record)(
             func
         )
-        return set_funcwcalls(patched_func, record=record, calls=None, file=file)
+        funcwcalls = FunctionWCalls(patched_func, record=record, calls=None, file=file)
+        return funcwcalls
 
     return wrapper
 
@@ -67,18 +65,10 @@ def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockRBase:
     return MockReplay(target, calls=calls)
 
 
-@overload
-def patcher_replay(func: FunctionWCalls[P, R], target: str) -> FunctionWCalls[P, R]: ...
-@overload
-def patcher_replay(
-    func: Callable[P, Optional[R]], target: str
-) -> Callable[P, Optional[R]]: ...
-
-
 def patcher_replay(
     func: Union[Callable[P, Optional[R]], FunctionWCalls[P, R]],
     target: str,
-) -> Union[Callable[P, Optional[R]], FunctionWCalls[P, R]]:
+) -> FunctionWCalls[P, R]:
     """Decorate a function so calls to ``target`` are recorded or replayed.
 
     Plain functions are first wrapped using the current recording mode.
@@ -92,24 +82,12 @@ def patcher_replay(
     Returns:
         The wrapped test function.
     """
-    is_function_with_calls = isinstance(func, FunctionWCalls)
-    if is_function_with_calls:
-        function_with_calls: FunctionWCalls = func
-    else:
-        if not has_funcwcalls(func):
-            func = set_replay()(func)
-        function_with_calls = get_funcwcalls(func)
+    if not isinstance(func, FunctionWCalls):
+        func = set_replay()(func)
 
-    wrapped_func = function_with_calls.func
-    record = function_with_calls.record
-    calls = function_with_calls.calls
-    file = function_with_calls.file
-    mock = replay_mock(target, function_with_calls)
-    patched_func = patch(target, mock)(wrapped_func)
+    mock = replay_mock(target, func)
 
-    if is_function_with_calls:
-        return FunctionWCalls(patched_func, record=record, calls=calls, file=file)
-    return set_funcwcalls(patched_func, record=record, calls=calls, file=file)
+    return func.decorated(patch(target, mock))
 
 
 def patch_replay(target: str):

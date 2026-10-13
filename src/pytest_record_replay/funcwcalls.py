@@ -11,7 +11,7 @@ import warnings
 
 import dill
 
-from pytest_record_replay.typing import Call, P, R
+from pytest_record_replay.typing import Call, P, R, P_, R_
 from pytest_record_replay.util import timestamp
 
 
@@ -23,6 +23,13 @@ class FunctionWCalls(Generic[P, R]):
     Call data may be supplied directly, loaded from ``file``, or discovered
     from this function's default recordings directory.
     """
+    __module__: str
+    __name__: str
+    __qualname__: str
+    __doc__: Optional[str]
+    __annotations__: dict
+    __type_params__: tuple
+    __wrapped__: Callable[P, R]
 
     @overload
     def __new__(
@@ -102,6 +109,11 @@ class FunctionWCalls(Generic[P, R]):
             if file is not None:
                 warnings.warn("Both calls and file provided. Using calls.")
         self.file = file
+        wraps(function)(self)
+
+    def decorated(self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]) -> FunctionWCalls[P_, R_]:
+        new_func = decorator(self.func)
+        return FunctionWCalls(new_func, record=self.record, calls=self.calls, file=self.file)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped function in the configured mode."""
@@ -200,41 +212,3 @@ class FunctionWCalls(Generic[P, R]):
         """Save calls in the default directory under ``name`` with a pickle suffix."""
         file = self.path / (name + ".pkl")
         self._save(file)
-
-
-def has_funcwcalls(func: Callable) -> bool:
-    """Return whether ``func`` has replay ``FunctionWCalls`` metadata."""
-    return hasattr(func, "function_with_calls") and isinstance(
-        func.function_with_calls,  # type: ignore
-        FunctionWCalls,
-    )
-
-
-def get_funcwcalls(func: Callable) -> FunctionWCalls:
-    """Return replay metadata attached to ``func``.
-
-    Raises:
-        ValueError: If ``func`` has no replay call metadata.
-    """
-    if not has_funcwcalls(func):
-        raise ValueError("Function does not have calls.")
-    return func.function_with_calls  # type: ignore
-
-
-def set_funcwcalls(
-    func: Callable[P, Optional[R]],
-    record: bool,
-    calls: Optional[List[Call]],
-    file: Optional[Path],
-) -> Callable[P, Optional[R]]:
-    """Attach a ``FunctionWCalls`` wrapper while preserving function metadata."""
-    function_with_calls = wraps(func)(
-        FunctionWCalls(func, record=record, calls=calls, file=file)
-    )
-
-    @wraps(func)
-    def patched_func(*args: P.args, **kwargs: P.kwargs):
-        return function_with_calls(*args, **kwargs)
-
-    patched_func.function_with_calls = function_with_calls  # type: ignore
-    return patched_func

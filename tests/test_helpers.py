@@ -4,9 +4,6 @@ import pytest
 
 from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
-    set_funcwcalls,
-    get_funcwcalls,
-    has_funcwcalls,
 )
 from pytest_record_replay.mock import (
     Call,
@@ -103,15 +100,3 @@ def test_update_argument_updates_mutables_inside_read_only_mapping():
 def test_update_argument_rejects_immutable_updates():
     with pytest.raises(TypeError, match="Cannot update mutable argument"):
         _update_argument(range(3), range(1, 4))
-
-
-def test_funcwcalls_helpers_detect_and_return_wrapper_metadata():
-    function = set_funcwcalls(lambda: None, record=False, calls=None, file=None)
-
-    assert has_funcwcalls(function)
-    assert isinstance(get_funcwcalls(function), FunctionWCalls)
-
-
-def test_get_funcwcalls_rejects_unwrapped_callable():
-    with pytest.raises(ValueError, match="does not have calls"):
-        get_funcwcalls(lambda: None)
