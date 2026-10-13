@@ -7,7 +7,9 @@ from typing_extensions import ParamSpec, TypeVar
 
 
 P = ParamSpec("P")
-R = TypeVar("R")
+R = TypeVar("R", covariant=True)
+P_ = ParamSpec("P_")
+R_ = TypeVar("R_", covariant=True)
 
 
 @dataclass()

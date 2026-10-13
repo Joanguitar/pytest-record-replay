@@ -7,7 +7,7 @@ from pytest_record_replay.mock import MockReplay
 from pytest_record_replay.decorators import patcher_replay, patch_replay, set_replay
 import pytest_record_replay.util as util_module
 from pytest_record_replay.typing import Call
-from pytest_record_replay.funcwcalls import FunctionWCalls, get_funcwcalls
+from pytest_record_replay.funcwcalls import FunctionWCalls
 
 
 def identity(value=None) -> None:
@@ -34,9 +34,9 @@ def test_set_replay_uses_global_and_explicit_modes(monkeypatch):
     default_wrapper = set_replay()(try_raise)
     explicit_wrapper = set_replay(record=False)(try_raise)
 
-    assert get_funcwcalls(default_wrapper).record is True
-    assert get_funcwcalls(explicit_wrapper).record is False
-    assert default_wrapper.__name__ == "try_raise"
+    assert default_wrapper.record is True
+    assert explicit_wrapper.record is False
+    assert default_wrapper.__name__ == "try_raise"  # type: ignore
 
 
 def test_set_replay_rejects_an_already_wrapped_function():
@@ -53,7 +53,7 @@ def test_replay_patch_preserves_existing_functionwcalls_metadata(
 ):
     target = f"{__name__}.dependency"
     wrapped = set_replay(record=record, file=file)(dependency)
-    function_with_calls = get_funcwcalls(wrapped)
+    function_with_calls = wrapped
 
     patched = patcher_replay(function_with_calls, target)
 
@@ -75,7 +75,7 @@ def test_replay_records_bound_method_without_receiver(monkeypatch):
         instance.value(item)
 
     assert call_method("item") is None
-    calls = get_funcwcalls(call_method).calls
+    calls = call_method.calls
     assert calls[0].args == ("item",)
     assert calls[0].output == "method: item"
 
@@ -107,8 +107,7 @@ def test_replay_handles_existing_wrapper_and_both_modes(record):
     def function(value) -> None:
         dependency(value)
 
-    wrapped = set_replay(record=record)(function)
-    funcwcalls = get_funcwcalls(wrapped)
+    funcwcalls = set_replay(record=record)(function)
     calls = funcwcalls.calls
 
     if not record:
@@ -122,9 +121,8 @@ def test_replay_handles_existing_wrapper_and_both_modes(record):
                 post_kwargs={},
             )
         )
-    decorated = patch_replay(target)(wrapped)
-    funcwcalls = get_funcwcalls(decorated)
-    assert decorated("item") is None
+    funcwcalls = patch_replay(target)(funcwcalls)
+    assert funcwcalls("item") is None
 
     if record:
         assert calls[0].target == target
