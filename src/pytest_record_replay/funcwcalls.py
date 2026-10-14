@@ -5,14 +5,14 @@ from __future__ import annotations
 from functools import wraps
 import inspect
 from pathlib import Path
-from typing import Any, Callable, Generic, List, Literal, Optional, overload
+from typing import Any, Callable, Generic, List, Literal, Optional, Union, overload
 import unittest
 import warnings
 
 import dill
 
 from pytest_record_replay.typing import Call, P, R, P_, R_
-from pytest_record_replay.util import timestamp
+from pytest_record_replay.util import record, recording, timestamp
 
 
 class FunctionWCalls(Generic[P, R]):
@@ -48,7 +48,7 @@ class FunctionWCalls(Generic[P, R]):
         function: Callable[P, R],
         *,
         file: Path,
-        record: bool = ...,
+        record: Optional[bool] = ...,
         calls: Optional[List[Call]] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
@@ -58,7 +58,7 @@ class FunctionWCalls(Generic[P, R]):
         function: Callable[P, R],
         *,
         calls: List[Call],
-        record: bool = ...,
+        record: Optional[bool] = ...,
         file: Optional[Path] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
@@ -72,11 +72,21 @@ class FunctionWCalls(Generic[P, R]):
         calls: Optional[List[Call]] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
+    @overload
+    def __new__(
+        cls,
+        function: Callable[P, R],
+        *,
+        record: Optional[bool] = None,
+        calls: Optional[List[Call]] = None,
+        file: Optional[Path] = None,
+    ) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, R]]: ...
+
     def __new__(
         cls,
         function: Callable[P, Any],
         *,
-        record: bool = False,
+        record: Optional[bool] = False,
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
     ) -> FunctionWCalls[P, Any]:
@@ -86,7 +96,7 @@ class FunctionWCalls(Generic[P, R]):
         self,
         function: Callable,
         *,
-        record: bool = False,
+        record: Optional[bool] = None,
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
     ):
@@ -101,8 +111,8 @@ class FunctionWCalls(Generic[P, R]):
         Raises:
             ValueError: If recording is requested with a nonempty call history.
         """
-        self.func = function
-        self.record: bool = record
+        self._func = function
+        self._record: Optional[bool] = record
         self.calls: List[Call] = calls if calls is not None else []
         if len(self.calls) > 0:
             if self.record:
@@ -110,28 +120,36 @@ class FunctionWCalls(Generic[P, R]):
             if file is not None:
                 warnings.warn("Both calls and file provided. Using calls.")
         self.file = file
+        self._instance = None
+        self._owner = None
         wraps(function)(self)
 
     def __get__(self, instance: Any, owner: Optional[type] = None):
         """Support instance-bound method access while preserving shared history."""
-        if instance is None:
-            return self
-        bound = self.func.__get__(instance, owner)
-        return type(self)(bound, record=self.record, calls=self.calls, file=self.file)
+        self._instance = instance
+        self._owner = owner
+        return self
+
+    @property
+    def func(self) -> Callable[P, R]:
+        if self._instance is not None:
+            return self._func.__get__(self._instance, self._owner)
+        return self._func
 
     def decorated(
         self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]
     ) -> FunctionWCalls[P_, R_]:
-        new_func = decorator(self.func)
+        new_func = decorator(self._func)
         return FunctionWCalls(
             new_func, record=self.record, calls=self.calls, file=self.file
         )
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped function in the configured mode."""
-        if self.record:
-            return self._call_record(*args, **kwargs)
-        return self._call_recall(*args, **kwargs)
+        with record(self.record):
+            if self.record:
+                return self._call_record(*args, **kwargs)
+            return self._call_recall(*args, **kwargs)
 
     def _call_record(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the function and persist calls made by patched dependencies."""
@@ -177,7 +195,7 @@ class FunctionWCalls(Generic[P, R]):
 
     def _TestCaseReset(self) -> bool:
         """Reset a bound ``unittest.TestCase`` between recording files."""
-        if hasattr(self.func, "__self__"):
+        if hasattr(self._func, "__self__"):
             testcase = self.func.__self__  # type: ignore
             if isinstance(testcase, unittest.TestCase):
                 testcase.tearDown()
@@ -186,14 +204,19 @@ class FunctionWCalls(Generic[P, R]):
         return False
 
     @property
+    def record(self) -> bool:
+        """Return the recording mode for this function."""
+        return self._record if self._record is not None else recording()
+
+    @property
     def path(self) -> Path:
         """Return the directory used for this function's saved call files."""
-        function = inspect.unwrap(self.func)
+        function = inspect.unwrap(self._func)
         path = Path(inspect.getfile(function))
         path = path.parent / "resources_pytest_record_replay" / path.stem
         # If the function is a method, include the class name in the file path
-        if inspect.ismethod(self.func):
-            instance = self.func.__self__
+        if inspect.ismethod(self._func):
+            instance = self._func.__self__
             if instance is not None:
                 path = path / instance.__class__.__name__
 

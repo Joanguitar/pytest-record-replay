@@ -3,9 +3,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pytest_record_replay.mock import MockReplay
+from pytest_record_replay.mock import MockR
 from pytest_record_replay.decorators import patcher_replay, patch_replay, set_replay
 import pytest_record_replay.util as util_module
+from pytest_record_replay.util import record
 from pytest_record_replay.typing import Call
 from pytest_record_replay.funcwcalls import FunctionWCalls
 
@@ -112,11 +113,12 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
             post_kwargs={},
         )
     ]
-    recall = MockReplay(target, calls=calls)
+    recall = MockR(target, calls=calls)
 
     assert recall.__get__(None, MethodDependency) is recall
     bound_recall = recall.__get__(MethodDependency(), MethodDependency)
-    assert bound_recall("item") == "replayed: item"
+    with record(False):
+        assert bound_recall("item") == "replayed: item"
 
 
 @pytest.mark.parametrize("record", [False, True])

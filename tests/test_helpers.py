@@ -1,3 +1,4 @@
+import asyncio
 from types import MappingProxyType
 
 import pytest
@@ -7,6 +8,38 @@ from pytest_record_replay.mock import (
     _for_update,
     _update_argument,
 )
+from pytest_record_replay.util import record, recording
+
+
+def test_record_context_sets_and_restores_recording_mode():
+    original_recording = recording()
+
+    with record(not original_recording):
+        assert recording() is not original_recording
+        with record(original_recording):
+            assert recording() is original_recording
+        assert recording() is not original_recording
+
+    assert recording() is original_recording
+
+
+def test_record_context_isolated_between_async_tasks():
+    async def verify_task_local_modes():
+        ready_true = asyncio.Event()
+        ready_false = asyncio.Event()
+
+        async def check_mode(value, ready, other_ready):
+            with record(value):
+                ready.set()
+                await other_ready.wait()
+                assert recording() is value
+
+        await asyncio.gather(
+            check_mode(True, ready_true, ready_false),
+            check_mode(False, ready_false, ready_true),
+        )
+
+    asyncio.run(verify_task_local_modes())
 
 
 def test_call_preserves_explicit_post_call_values():

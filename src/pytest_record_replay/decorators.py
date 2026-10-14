@@ -8,9 +8,8 @@ from unittest.mock import patch
 from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
 )
-from pytest_record_replay.mock import MockRBase, MockReplay, MockRecord
+from pytest_record_replay.mock import MockR
 from pytest_record_replay.typing import P, R, R_
-from pytest_record_replay.util import recording
 
 
 def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
@@ -56,7 +55,6 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     Raises:
         AttributeError: If the function already has replay call metadata.
     """
-    record = recording() if record is None else record
 
     def wrapper(
         func: Callable[P, R],
@@ -66,7 +64,7 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
                 "@set_replay should be applied before any @patch_replay decorator."
             )
         return FunctionWCalls(
-            patch("pytest_record_replay.util.recording", lambda: record)(func),
+            func,
             record=record,
             file=file,
         )
@@ -74,7 +72,7 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     return _allow_class(wrapper)
 
 
-def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockRBase:
+def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockR:
     """Create the mock used to record or replay calls to a patched target.
 
     The mock type is selected from ``funcwcalls.record`` and shares its call
@@ -84,11 +82,7 @@ def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockRBase:
         target: The fully qualified name of the function being patched.
         funcwcalls: The wrapper that contains recording mode and call data.
     """
-    calls = funcwcalls.calls
-    if funcwcalls.record:
-        original_func, _ = patch(target).get_original()
-        return MockRecord(target, original_func, calls=calls)
-    return MockReplay(target, calls=calls)
+    return MockR(target, calls=funcwcalls.calls)
 
 
 def patcher_replay(

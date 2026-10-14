@@ -1,20 +1,22 @@
 """Callable recording and replay primitives."""
 
-from abc import ABC, abstractmethod
+import inspect
+from abc import ABC
 from typing import (
-    Callable,
+    Any,
     List,
     Optional,
 )
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import dill
 
 from pytest_record_replay.typing import Call
+from pytest_record_replay import util
 from pytest_record_replay.util import _for_update, _update_argument
 
 
-class MockRBase(ABC, Mock):
+class MockR(ABC, Mock):
     """Base mock that shares a call list and supports method descriptor binding.
 
     Subclasses implement ``_execute_mock_call`` to either invoke and record the
@@ -25,39 +27,46 @@ class MockRBase(ABC, Mock):
         self, target: str, *args, calls: Optional[List[Call]] = None, **kwargs
     ):
         """Initialize the mock and optionally share an existing call list."""
+        user_function = args[0] if args and callable(args[0]) else None
+        if user_function is not None:
+            args = args[1:]
         super().__init__(*args, **kwargs)
         self._target = target
         self._calls = calls if calls is not None else []
+        self._instance: Optional[Any] = None
+        self._owner: Optional[type] = None
+        function = user_function
+        if function is None:
+            try:
+                function, _ = patch(self._target).get_original()
+            except (AttributeError, TypeError, ValueError):
+                frame = inspect.currentframe()
+                caller = frame.f_back if frame is not None else None
+                if caller is not None:
+                    function = caller.f_globals.get(self._target)
+                if function is None:
+                    raise
+        self._function = function
+
+    @property
+    def function(self):
+        """The callable being recorded or replayed."""
+        if self._instance is not None:
+            return self._function.__get__(self._instance, self._owner)
+        return self._function
 
     def __get__(self, instance, owner=None):
         """Bind a recorder to an instance method or return a replay descriptor."""
-        if instance is None:
-            return self
-        if isinstance(self, MockRecord):
-            function = self.function.__get__(instance, owner)
-            return MockRecord(self._target, function, calls=self._calls)
-        return MockReplay(self._target, calls=self._calls)
-
-    @abstractmethod
-    def _execute_mock_call(self, /, *args, **kwargs): ...
-
-
-class MockRecord(MockRBase):
-    """Invoke an original callable and append a serializable call record."""
-
-    def __init__(
-        self,
-        target: str,
-        function: Callable,
-        *args,
-        calls: Optional[List[Call]] = None,
-        **kwargs,
-    ):
-        """Create a recorder for ``target`` using ``function`` as its original."""
-        super().__init__(target, *args, calls=calls, **kwargs)
-        self.function = function
+        self._instance = instance
+        self._owner = owner
+        return self
 
     def _execute_mock_call(self, /, *args, **kwargs):
+        if util.recording():
+            return self._execute_mock_call_record(*args, **kwargs)
+        return self._execute_mock_call_replay(*args, **kwargs)
+
+    def _execute_mock_call_record(self, /, *args, **kwargs):
         """Validate, deep-copy, invoke, and record one call."""
         # Make sure that the arguments and the output are picklable before recording
         for arg in args:
@@ -92,17 +101,7 @@ class MockRecord(MockRBase):
         )
         return output
 
-
-class MockReplay(MockRBase):
-    """Replay saved outputs while validating inputs and restoring mutations."""
-
-    def __init__(
-        self, target: str, *args, calls: Optional[List[Call]] = None, **kwargs
-    ):
-        """Create a replay mock sharing the supplied call history."""
-        super().__init__(target, *args, calls=calls, **kwargs)
-
-    def _execute_mock_call(self, /, *args, **kwargs):
+    def _execute_mock_call_replay(self, /, *args, **kwargs):
         """Consume and validate the next call, apply updates, and return output."""
         call = self._calls.pop(0)
         if call.target != self._target:

@@ -1,12 +1,15 @@
 """Internal recording state and mutable-argument replay helpers."""
 
 from collections.abc import (
+    Generator,
     Mapping,
     MutableMapping,
     MutableSequence,
     MutableSet,
     Sequence,
 )
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Optional
 
@@ -16,12 +19,26 @@ from pytest_record_replay.typing import R
 
 
 _recording = False
+_recording_context: ContextVar[Optional[bool]] = ContextVar(
+    "pytest_record_replay_recording", default=None
+)
 timestamp = datetime.now().isoformat().replace(":", "-")
 
 
 def recording() -> bool:
     """Return whether the current pytest run is recording calls."""
-    return _recording
+    context_recording = _recording_context.get()
+    return _recording if context_recording is None else context_recording
+
+
+@contextmanager
+def record(recording_value: bool) -> Generator[None, None, None]:
+    """Set context-local recording mode for the duration of the context."""
+    token = _recording_context.set(recording_value)
+    try:
+        yield
+    finally:
+        _recording_context.reset(token)
 
 
 def _configure_patch(record: bool):
