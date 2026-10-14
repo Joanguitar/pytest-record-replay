@@ -1,0 +1,14 @@
+name: Pull request checks
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  check-version:
+    uses: ./.github/workflows/check_version.yml
