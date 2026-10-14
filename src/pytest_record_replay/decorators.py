@@ -9,7 +9,7 @@ from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
 )
 from pytest_record_replay.mock import MockR
-from pytest_record_replay.typing import P, R, R_
+from pytest_record_replay.typing import P, R, R_, T
 
 
 def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
@@ -28,9 +28,9 @@ def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
 
 def _allow_class(
     func: Callable[[Callable[P, R]], R_],
-) -> Callable[[Union[type, Callable[P, R]]], Union[type, R_]]:
+):
     @overload
-    def wrapped(obj: type) -> type: ...
+    def wrapped(obj: T) -> T: ...
     @overload
     def wrapped(obj: Callable[P, R]) -> R_: ...
     def wrapped(obj: Union[type, Callable[P, R]]) -> Union[type, R_]:
@@ -58,7 +58,7 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
 
     def wrapper(
         func: Callable[P, R],
-    ) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
+    ):
         if isinstance(func, FunctionWCalls):
             raise AttributeError(
                 "@set_replay should be applied before any @patch_replay decorator."
