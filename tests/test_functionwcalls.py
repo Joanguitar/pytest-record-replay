@@ -6,9 +6,9 @@ import pytest
 from pytest_record_replay.util import timestamp
 from pytest_record_replay.mock import (
     Call,
+    MockR,
 )
 from pytest_record_replay.funcwcalls import FunctionWCalls
-from pytest_record_replay.decorators import replay_mock
 
 
 def test_timestamp_is_safe_for_windows_paths():
@@ -45,13 +45,13 @@ def call_funcs_calls(value):
 
 def patch_identity(funcwcalls: FunctionWCalls):
     return patch(
-        f"{__name__}.identity", replay_mock(f"{__name__}.identity", funcwcalls)
+        f"{__name__}.identity", MockR(f"{__name__}.identity", calls=funcwcalls.calls)
     )
 
 
 def patch_dependency(funcwcalls: FunctionWCalls):
     return patch(
-        f"{__name__}.dependency", replay_mock(f"{__name__}.dependency", funcwcalls)
+        f"{__name__}.dependency", MockR(f"{__name__}.dependency", calls=funcwcalls.calls)
     )
 
 
