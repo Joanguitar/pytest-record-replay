@@ -36,7 +36,7 @@ def _allow_class(
     def wrapped(obj: Callable[P, R]) -> R_: ...
     def wrapped(obj: Union[type, Callable[P, R]]) -> Union[type, R_]:
         if isinstance(obj, type):
-            _decorate_class(obj, func)
+            return _decorate_class(obj, func)
         return func(obj)
 
     return wrapped
