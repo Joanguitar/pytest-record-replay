@@ -46,6 +46,26 @@ def test_set_replay_rejects_an_already_wrapped_function():
         set_replay()(wrapped)
 
 
+def test_set_replay_and_patch_replay_support_class_decorators():
+    @patch_replay(f"{__name__}.identity")
+    @patch_replay(f"{__name__}.dependency")
+    @set_replay(record=True)
+    class Example:
+        test_value = 1
+        helper = object()
+
+        def test_method(self):
+            pytest.fail("should not be called")
+            assert dependency(1) == "result: 1"
+
+    assert isinstance(Example, type)
+    assert Example.test_value == 1
+    assert isinstance(Example.helper, object)
+    assert isinstance(Example.test_method, FunctionWCalls)
+    assert Example.test_method.record is True
+    assert callable(Example.test_method.func)
+
+
 @pytest.mark.parametrize("record", [True, False])
 @pytest.mark.parametrize("file", [None, Path("path/to/file.pkl")])
 def test_replay_patch_preserves_existing_functionwcalls_metadata(

@@ -112,6 +112,13 @@ class FunctionWCalls(Generic[P, R]):
         self.file = file
         wraps(function)(self)
 
+    def __get__(self, instance: Any, owner: Optional[type] = None):
+        """Support instance-bound method access while preserving shared history."""
+        if instance is None:
+            return self
+        bound = self.func.__get__(instance, owner)
+        return type(self)(bound, record=self.record, calls=self.calls, file=self.file)
+
     def decorated(
         self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]
     ) -> FunctionWCalls[P_, R_]:
@@ -124,8 +131,7 @@ class FunctionWCalls(Generic[P, R]):
         """Invoke the wrapped function in the configured mode."""
         if self.record:
             return self._call_record(*args, **kwargs)
-        else:
-            return self._call_recall(*args, **kwargs)
+        return self._call_recall(*args, **kwargs)
 
     def _call_record(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the function and persist calls made by patched dependencies."""
@@ -170,11 +176,7 @@ class FunctionWCalls(Generic[P, R]):
             self._call_recall_calls(*args, **kwargs)
 
     def _TestCaseReset(self) -> bool:
-        """Reset a bound ``unittest.TestCase`` between recording files.
-
-        Returns:
-            Whether the wrapped function belongs to a ``TestCase`` instance.
-        """
+        """Reset a bound ``unittest.TestCase`` between recording files."""
         if hasattr(self.func, "__self__"):
             testcase = self.func.__self__  # type: ignore
             if isinstance(testcase, unittest.TestCase):
@@ -190,8 +192,11 @@ class FunctionWCalls(Generic[P, R]):
         path = Path(inspect.getfile(function))
         path = path.parent / "resources_pytest_record_replay" / path.stem
         # If the function is a method, include the class name in the file path
-        if inspect.ismethod(function):
-            path = path / function.__self__.__class__.__name__
+        if inspect.ismethod(self.func):
+            instance = self.func.__self__
+            if instance is not None:
+                path = path / instance.__class__.__name__
+
         path = path / function.__name__
         return path
 
