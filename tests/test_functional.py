@@ -1,11 +1,11 @@
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
+from pytest_record_replay.util import recording
 from pytest_record_replay.decorators import (
     _decorate_class,
     set_replay,
     patch_replay,
-    recording,
 )
 
 

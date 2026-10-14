@@ -72,19 +72,6 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     return _allow_class(wrapper)
 
 
-def replay_mock(target: str, funcwcalls: FunctionWCalls) -> MockR:
-    """Create the mock used to record or replay calls to a patched target.
-
-    The mock type is selected from ``funcwcalls.record`` and shares its call
-    list, so recorded calls are visible to the wrapped test function.
-
-    Args:
-        target: The fully qualified name of the function being patched.
-        funcwcalls: The wrapper that contains recording mode and call data.
-    """
-    return MockR(target, calls=funcwcalls.calls)
-
-
 def patcher_replay(
     func: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]],
     target: str,
@@ -106,7 +93,7 @@ def patcher_replay(
         func = set_replay()(func)
         assert not isinstance(func, type)
 
-    return func.decorated(patch(target, replay_mock(target, func)))
+    return func.decorated(patch(target, MockR(target, calls=func.calls)))
 
 
 def patch_replay(target: str):
