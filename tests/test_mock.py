@@ -1,6 +1,7 @@
 import pytest
 
-from pytest_record_replay.mock import MockReplay, MockRecord
+from pytest_record_replay.util import record
+from pytest_record_replay.mock import MockR
 
 
 def identity(value=None):
@@ -13,46 +14,52 @@ def dependency(value):
 
 def test_record_and_recall_keyword_arguments():
     calls = []
-    recorder = MockRecord("dependency", dependency, calls=calls)
 
-    assert recorder(value="recorded") == "result: recorded"
-    assert MockReplay("dependency", calls=calls)(value="recorded") == (
-        "result: recorded"
-    )
+    mockr = MockR("dependency", calls=calls)
+    with record(True):
+        assert mockr(value="recorded") == "result: recorded"
+    with record(False):
+        assert mockr(value="recorded") == ("result: recorded")
 
 
 def test_recall_rejects_keyword_argument_mismatch():
     calls = []
-    MockRecord("dependency", dependency, calls=calls)(value="expected")
+    mockr = MockR("dependency", calls=calls)
+    with record(True):
+        mockr(value="expected")
 
     with pytest.raises(ValueError, match="Arguments mismatch"):
-        MockReplay("dependency", calls=calls)(value="different")
+        with record(False):
+            mockr(value="different")
 
 
 def test_record_rejects_non_dillable_positional_argument():
-    recorder = MockRecord("dependency", dependency)
+    mockr = MockR("dependency", dependency)
     value = (item for item in ())
 
     with pytest.raises(ValueError, match="Argument .* is not picklable"):
-        recorder(value)
+        with record(True):
+            mockr(value)
 
 
 def test_record_rejects_non_dillable_keyword_argument():
-    recorder = MockRecord("dependency", dependency)
+    mockr = MockR("dependency", dependency)
     value = (item for item in ())
 
     with pytest.raises(ValueError, match="Keyword argument value=.* is not picklable"):
-        recorder(value=value)
+        with record(True):
+            mockr(value=value)
 
 
 def test_record_rejects_non_dillable_output():
     def returns_generator():
         return (item for item in ())
 
-    recorder = MockRecord("dependency", returns_generator)
+    mockr = MockR("dependency", returns_generator)
 
     with pytest.raises(ValueError, match="Output .* is not picklable"):
-        recorder()
+        with record(True):
+            mockr()
 
 
 def test_recorded_call_deep_copies_args_kwargs_and_output():
@@ -64,11 +71,10 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
     positional = ["before call"]
     keyword = {"items": ["before call"]}
     calls = []
-    recorder = MockRecord(
-        "mutate_inputs_and_return", mutate_inputs_and_return, calls=calls
-    )
+    recorder = MockR("mutate_inputs_and_return", mutate_inputs_and_return, calls=calls)
 
-    result = recorder(positional, keyword=keyword)
+    with record(True):
+        result = recorder(positional, keyword=keyword)
     result["items"].append("after call")
     positional.append("after call")
     keyword["items"].append("after call")
@@ -80,7 +86,10 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
 
 def test_recall_wrong_target_raises_value_error():
     calls = []
-    MockRecord("dependency", dependency, calls=calls)(value="expected")
+    mockr = MockR("dependency", calls=calls)
+    with record(True):
+        mockr(value="expected")
 
     with pytest.raises(ValueError, match="Target mismatch"):
-        MockReplay("different_target", calls=calls)(value="expected")
+        with record(False):
+            MockR("identity", calls=calls)(value="expected")

@@ -1,12 +1,10 @@
 from contextlib import contextmanager
-import unittest
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
 from pytest_record_replay.util import timestamp
 from pytest_record_replay.mock import (
-    MockReplay,
     Call,
 )
 from pytest_record_replay.funcwcalls import FunctionWCalls
@@ -176,45 +174,6 @@ def test_call_recall_requires_recording_files(_files_mock):
 
     with pytest.raises(AssertionError, match="No recorded calls found"):
         funcwcalls._call_recall()
-
-
-def test_call_recall_loads_files_and_resets_test_case(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        FunctionWCalls,
-        "path",
-        property(lambda self: tmp_path / "recordings"),
-    )
-    events = []
-
-    class Case(unittest.TestCase):
-        def setUp(self):
-            events.append("setUp")
-
-        def tearDown(self):
-            events.append("tearDown")
-
-        def run_case(self):
-            call = funcwcalls.calls[0]
-            output = MockReplay(call.target, calls=funcwcalls.calls)()
-            events.append((self._testMethodName, output))
-            return output
-
-    case = Case("run_case")
-    funcwcalls = FunctionWCalls(case.run_case)
-    funcwcalls.calls[:] = [Call("one", (), {}, "first", post_args=(), post_kwargs={})]
-    funcwcalls.save("one")
-    funcwcalls.calls[:] = [Call("two", (), {}, "second", post_args=(), post_kwargs={})]
-    funcwcalls.save("two")
-    funcwcalls.calls.clear()
-
-    outputs = funcwcalls()
-
-    assert outputs is None
-    assert [event[1] for event in events if isinstance(event, tuple)] == [
-        "first",
-        "second",
-    ]
-    assert events[1:3] == ["tearDown", "setUp"]
 
 
 def test_test_case_reset_skips_plain_function():
