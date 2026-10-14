@@ -51,7 +51,8 @@ def patch_identity(funcwcalls: FunctionWCalls):
 
 def patch_dependency(funcwcalls: FunctionWCalls):
     return patch(
-        f"{__name__}.dependency", MockR(f"{__name__}.dependency", calls=funcwcalls.calls)
+        f"{__name__}.dependency",
+        MockR(f"{__name__}.dependency", calls=funcwcalls.calls),
     )
 
 

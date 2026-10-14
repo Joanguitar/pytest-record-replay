@@ -11,6 +11,8 @@ R = TypeVar("R")
 P_ = ParamSpec("P_")
 R_ = TypeVar("R_")
 
+T = TypeVar("T", bound=type)
+
 
 @dataclass()
 class Call:
