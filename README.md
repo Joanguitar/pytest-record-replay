@@ -71,6 +71,22 @@ If `record` is omitted, `set_replay` uses the current pytest mode: recording
 with `--record`, replaying without it. When using both decorators, place
 `@set_replay` closest to the function so it is applied before `@patch_replay`.
 
+## Patching classes
+
+You can also decorate a test class. Each callable method whose name starts
+with `test` receives the patch, so the class can share dependency patches
+across its tests:
+
+```python
+@patch_replay("myapp.client.fetch_data")
+@set_replay(file=Path("/path/to/my/file.pkl"))
+class TestClient:
+    def test_fetch_data(self):
+        assert client.fetch_data("item-1") == {"id": "item-1"}
+```
+
+Stack class decorators to patch multiple dependencies for each test method.
+
 ## Check recording mode
 
 Use `recording()` in Python code or request pytest's `replay_recording`
