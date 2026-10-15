@@ -3,30 +3,27 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+import helpers
 from pytest_record_replay.mock import MockR
-from pytest_record_replay.decorators import patcher_replay, patch_replay, set_replay
+from pytest_record_replay.decorators import (
+    _decorate_class,
+    patcher_replay,
+    patch_replay,
+    set_replay,
+)
 import pytest_record_replay.util as util_module
-from pytest_record_replay.util import record
+from pytest_record_replay.util import record, recording
 from pytest_record_replay.typing import Call
 from pytest_record_replay.funcwcalls import FunctionWCalls
-
-
-def identity(value=None) -> None:
-    return value
-
-
-def dependency(value):
-    return f"result: {value}"
-
-
-def try_raise(error: Exception) -> None:
-    if isinstance(error, Exception):
-        raise error
-
-
-class MethodDependency:
-    def value(self, item):
-        return f"method: {item}"
+from helpers import (
+    MethodDependency,
+    counting,
+    dependency,
+    describe,
+    identity,
+    multiply,
+    try_raise,
+)
 
 
 def test_set_replay_uses_global_and_explicit_modes(monkeypatch):
@@ -48,8 +45,8 @@ def test_set_replay_rejects_an_already_wrapped_function():
 
 
 def test_set_replay_and_patch_replay_support_class_decorators():
-    @patch_replay(f"{__name__}.identity")
-    @patch_replay(f"{__name__}.dependency")
+    @patch_replay("helpers.identity")
+    @patch_replay("helpers.dependency")
     @set_replay(record=True)
     class Example:
         test_value = 1
@@ -57,7 +54,7 @@ def test_set_replay_and_patch_replay_support_class_decorators():
 
         def test_method(self):
             pytest.fail("should not be called")
-            assert dependency(1) == "result: 1"
+            assert helpers.dependency(1) == "result: 1"
 
     assert isinstance(Example, type)
     assert Example.test_value == 1
@@ -72,7 +69,7 @@ def test_set_replay_and_patch_replay_support_class_decorators():
 def test_replay_patch_preserves_existing_functionwcalls_metadata(
     record: bool, file: Path
 ):
-    target = f"{__name__}.dependency"
+    target = "helpers.dependency"
     wrapped = set_replay(record=record, file=file)(dependency)
     function_with_calls = wrapped
 
@@ -88,7 +85,7 @@ def test_replay_patch_preserves_existing_functionwcalls_metadata(
 @patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_replay_records_bound_method_without_receiver(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
-    target = f"{__name__}.MethodDependency.value"
+    target = "helpers.MethodDependency.value"
     instance = MethodDependency()
 
     @patch_replay(target)
@@ -102,7 +99,7 @@ def test_replay_records_bound_method_without_receiver(monkeypatch):
 
 
 def test_mock_descriptor_supports_class_access_and_replay_binding():
-    target = f"{__name__}.MethodDependency.value"
+    target = "helpers.MethodDependency.value"
     calls = [
         Call(
             target,
@@ -124,10 +121,10 @@ def test_mock_descriptor_supports_class_access_and_replay_binding():
 @pytest.mark.parametrize("record", [False, True])
 @patch("pytest_record_replay.funcwcalls.FunctionWCalls._save", new=Mock())
 def test_replay_handles_existing_wrapper_and_both_modes(record):
-    target = f"{__name__}.dependency"
+    target = "helpers.dependency"
 
     def function(value) -> None:
-        dependency(value)
+        helpers.dependency(value)
 
     funcwcalls = set_replay(record=record)(function)
     calls = funcwcalls.calls
@@ -153,3 +150,31 @@ def test_replay_handles_existing_wrapper_and_both_modes(record):
         assert calls[0].output == "result: item"
     else:
         assert funcwcalls.calls == []
+
+
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save")  # Don't actually save
+def test_recording_testcase_will_always_save(mock_save: Mock):
+    @patch_replay("helpers.multiply")
+    @patch_replay("helpers.describe")
+    @set_replay(record=True)
+    class RecordingTestClass:
+        def test_multiple_functions_are_recorded(self):
+            with counting() as count:
+                assert multiply(10) == 20
+                assert describe("test") == {"name": "test", "active": True}
+                for key in ["multiply", "describe"]:
+                    assert count[key] == recording()
+
+    recording_test = RecordingTestClass()
+    counter = 0
+
+    def _eval_method(method):
+        nonlocal counter
+        print(method.__name__)
+        method(recording_test)
+        mock_save.assert_called_once()
+        mock_save.reset_mock()
+        counter += 1
+
+    _decorate_class(RecordingTestClass, _eval_method)
+    assert counter > 0

@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from functools import wraps
+from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
@@ -9,18 +11,11 @@ from pytest_record_replay.mock import (
     MockR,
 )
 from pytest_record_replay.funcwcalls import FunctionWCalls
+from helpers import dependency, identity
 
 
 def test_timestamp_is_safe_for_windows_paths():
     assert not any(char in timestamp for char in '<>:"/\\|?*')
-
-
-def identity(value=None):
-    return value
-
-
-def dependency(value):
-    return f"result: {value}"
 
 
 def call_funcs(value):
@@ -108,14 +103,16 @@ def test_function_wrapper_warns_when_calls_and_file_are_provided(tmp_path):
     calls = [Call("identity", (), {}, None)]
 
     with pytest.warns(UserWarning, match="Both calls and file provided"):
-        funcwcalls = FunctionWCalls(identity, calls=calls, file=tmp_path / "calls.pkl")
+        funcwcalls = FunctionWCalls(
+            identity, calls=calls, file=tmp_path / "calls.pkl", record=False
+        )
 
     assert funcwcalls.calls is calls
 
 
 def test_recall_rejects_unconsumed_in_memory_calls():
     calls = [Call("identity", (), {}, "unused")]
-    funcwcalls = FunctionWCalls(lambda: None, calls=calls)
+    funcwcalls = FunctionWCalls(lambda: None, calls=calls, record=False)
 
     with pytest.raises(AssertionError, match="Unconsumed calls remain"):
         funcwcalls()
@@ -149,7 +146,9 @@ def test_function_wrapper_records_and_recalls_from_explicit_file(tmp_path, value
 
 
 def test_call_record_requires_empty_calls():
-    funcwcalls = FunctionWCalls(identity, calls=[Call("identity", (), {}, None)])
+    funcwcalls = FunctionWCalls(
+        identity, calls=[Call("identity", (), {}, None)], record=False
+    )
 
     with pytest.raises(AssertionError, match="Calls should be empty"):
         funcwcalls._call_record()
@@ -173,7 +172,7 @@ def test_call_record_saves_calls(save_mock):
 def test_call_recall_requires_recording_files(_files_mock):
     funcwcalls = FunctionWCalls(identity)
 
-    with pytest.raises(AssertionError, match="No recorded calls found"):
+    with pytest.raises(AssertionError, match="No recordings found"):
         funcwcalls._call_recall()
 
 
@@ -247,3 +246,50 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
     assert funcwcalls.calls == [original]
     assert isinstance(funcwcalls.calls[0].args[0], bytes)
     assert isinstance(funcwcalls.calls[0].kwargs["tags"], set)
+
+
+def test_function_path():
+    def example(value):
+        return value
+
+    base_path = (
+        Path(__file__).parent / "resources_pytest_record_replay" / Path(__file__).stem
+    )
+    assert FunctionWCalls(example).path == base_path / "example"
+
+    @wraps(example)  # Wraps preserves the name of the function
+    def example2(value):
+        return value
+
+    assert FunctionWCalls(example2).path == base_path / "example"
+
+
+def test_method_path():
+    class Example1:
+        @FunctionWCalls
+        def example(self, value):
+            return value
+
+    class Example2(Example1): ...
+
+    base_path = (
+        Path(__file__).parent / "resources_pytest_record_replay" / Path(__file__).stem
+    )
+    assert Example1().example.path == base_path / "Example1" / "example"
+    assert Example2().example.path == base_path / "Example2" / "example"
+
+
+def test_method_path_post_patch():
+    class Example1:
+        def example(self, value):
+            return value
+
+    class Example2(Example1): ...
+
+    Example1.example = FunctionWCalls(Example1.example)
+    Example2.example = FunctionWCalls(Example1.example)
+    base_path = (
+        Path(__file__).parent / "resources_pytest_record_replay" / Path(__file__).stem
+    )
+    assert Example1().example.path == base_path / "Example1" / "example"  # pyright: ignore[reportAttributeAccessIssue]
+    assert Example2().example.path == base_path / "Example2" / "example"  # pyright: ignore[reportAttributeAccessIssue]

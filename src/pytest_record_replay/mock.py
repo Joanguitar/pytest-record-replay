@@ -1,6 +1,5 @@
 """Callable recording and replay primitives."""
 
-import inspect
 from abc import ABC
 from typing import (
     Any,
@@ -37,15 +36,7 @@ class MockR(ABC, Mock):
         self._owner: Optional[type] = None
         function = user_function
         if function is None:
-            try:
-                function, _ = patch(self._target).get_original()
-            except (AttributeError, TypeError, ValueError):
-                frame = inspect.currentframe()
-                caller = frame.f_back if frame is not None else None
-                if caller is not None:
-                    function = caller.f_globals.get(self._target)
-                if function is None:
-                    raise
+            function, _ = patch(self._target).get_original()
         self._function = function
 
     @property
