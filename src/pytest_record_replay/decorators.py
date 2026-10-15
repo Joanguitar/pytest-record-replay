@@ -14,6 +14,7 @@ from pytest_record_replay.util import none_xor
 
 
 def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
+    """Apply ``func`` to each callable test method on ``obj``."""
     for attr in dir(obj):
         if not attr.startswith(patch.TEST_PREFIX):
             continue
@@ -30,6 +31,8 @@ def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
 def _allow_class(
     func: Callable[[Callable[P, R]], R_],
 ):
+    """Adapt a function decorator to classes by decorating their test methods."""
+
     @overload
     def wrapped(obj: T) -> T: ...
     @overload
@@ -46,16 +49,18 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     """Wrap a function with replay call tracking, without patching a dependency.
 
     Args:
-        record: Whether calls should be recorded. If omitted, use the current
-            replay recording mode.
-        file: Optional file to use when recording or replaying calls.
+        record: Whether calls should be recorded. If omitted, use the active
+            recording mode when the wrapped function is called.
+        file: Optional pickle file to write during recording or read during
+            replay. If omitted, use the default recordings directory.
 
     Returns:
-        A decorator that wraps the function and exposes its call metadata.
+        A decorator that wraps the function and exposes its call metadata. It
+        can also decorate a class, applying the wrapper to each test method.
 
     Raises:
-        AttributeError: If the function already has replay call metadata
-        incompatible with this decorator.
+        AttributeError: If existing replay metadata has conflicting recording
+            mode or file settings.
     """
 
     def wrapper(
@@ -96,9 +101,10 @@ def patcher_replay(
 ):
     """Decorate a function so calls to ``target`` are recorded or replayed.
 
-    Plain functions are first wrapped using the current recording mode.
-    Functions already carrying replay metadata keep that configuration. A
-    ``FunctionWCalls`` passed directly is returned as a ``FunctionWCalls``.
+    Plain functions are first wrapped using the active recording mode.
+    Functions already carrying replay metadata retain their recording mode,
+    call history, and file. In either case, a new ``FunctionWCalls`` wrapper
+    invokes the function with ``target`` patched.
 
     Args:
         func: The test function to wrap, or its ``FunctionWCalls`` metadata.
@@ -120,7 +126,8 @@ def patch_replay(target: str):
         target: The fully qualified name of the dependency to patch.
 
     Returns:
-        A decorator suitable for applying directly to a test function.
+        A decorator suitable for applying to a test function or a test class.
+        When given a class, the patch is applied to each callable test method.
     """
     _patcher = partial(patcher_replay, target=target)
     return _allow_class(_patcher)

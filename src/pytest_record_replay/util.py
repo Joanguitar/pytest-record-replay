@@ -25,14 +25,22 @@ timestamp = datetime.now().isoformat().replace(":", "-")
 
 
 def recording() -> bool:
-    """Return whether the current pytest run is recording calls."""
+    """Return the active recording mode.
+
+    A context-local mode set by :func:`record` takes precedence over the
+    session-wide mode configured by the pytest plugin.
+    """
     context_recording = _recording_context.get()
     return _recording if context_recording is None else context_recording
 
 
 @contextmanager
 def record(recording_value: bool) -> Generator[None, None, None]:
-    """Set context-local recording mode for the duration of the context."""
+    """Temporarily set the context-local recording mode.
+
+    The previous context-local mode is restored when the context exits,
+    including when its body raises an exception.
+    """
     token = _recording_context.set(recording_value)
     try:
         yield
@@ -41,21 +49,22 @@ def record(recording_value: bool) -> Generator[None, None, None]:
 
 
 def _configure_patch(record: bool):
-    """Set recording mode for wrappers created during this test session."""
+    """Set the session-wide recording mode used outside ``record`` contexts."""
     global _recording
     _recording = record
 
 
 def _for_update(arg: R, rarg: R) -> Optional[R]:
-    """Describe how to restore ``arg`` to its post-call value ``rarg``.
+    """Capture how to restore ``arg`` to its post-call value ``rarg``.
 
-    Returns ``None`` when the value is unchanged; for mutable containers,
-    returns a copy of the replacement state. Nested immutable containers are
-    rebuilt with updates for any mutable values they contain.
+    Returns ``None`` when the serialized values are equal. For mutable
+    containers, returns a deep copy of the post-call state. For non-string
+    sequences and mappings, recursively captures updates to their contents.
 
     Raises:
-        TypeError: If the values have different types or cannot be updated.
-        ValueError: If the argument cannot be serialized with dill.
+        TypeError: If the values have different types or a changed value
+            cannot be represented as an update.
+        ValueError: If ``arg`` cannot be serialized with dill.
     """
     if type(arg) is not type(rarg):
         raise TypeError(
@@ -82,7 +91,8 @@ def _update_argument(target: R, updated: Optional[R]) -> None:
     mutable values nested inside them.
 
     Raises:
-        TypeError: If the saved state has a different type or cannot be applied.
+        TypeError: If the saved state has a different type or cannot be applied
+            to the target.
     """
     if updated is None:
         return
@@ -119,10 +129,10 @@ def _update_argument(target: R, updated: Optional[R]) -> None:
 
 
 def none_xor(a, b):
-    """Choose a non-None mode, rejecting duplicate explicit modes.
+    """Select a value while rejecting conflicting non-None values.
 
-    If either argument is ``None``, return the other. If both are set and
-    differ, return ``a``; if they are equal, raise ``ValueError``.
+    If either argument is ``None``, return the other. If both are non-None
+    and equal, return ``a``; if they differ, raise ``ValueError``.
     """
     if a is None:
         return b
