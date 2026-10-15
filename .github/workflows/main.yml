@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/check_version.yml
 
   build:
-    needs: check-version
+    needs: [test, check-version]
     uses: ./.github/workflows/build.yml
 
   pypi-publish:

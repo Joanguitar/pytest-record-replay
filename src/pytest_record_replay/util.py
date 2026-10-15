@@ -1,7 +1,6 @@
 """Internal recording state and mutable-argument replay helpers."""
 
 from collections.abc import (
-    Generator,
     Mapping,
     MutableMapping,
     MutableSequence,
@@ -11,7 +10,7 @@ from collections.abc import (
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Generator
 
 import dill
 
