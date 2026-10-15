@@ -37,11 +37,47 @@ def test_set_replay_uses_global_and_explicit_modes(monkeypatch):
     assert default_wrapper.__name__ == "try_raise"  # type: ignore
 
 
-def test_set_replay_rejects_an_already_wrapped_function():
-    wrapped = set_replay()(identity)
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save")
+def test_set_replay_multiple(mock_save: Mock, tmp_path: Path):
+    @patch_replay(f"{__name__}.identity")
+    @set_replay(record=True)
+    def example():
+        return identity(1) == 1
 
-    with pytest.raises(AttributeError, match="should be applied before"):
-        set_replay()(wrapped)
+    wrapped = set_replay(file=tmp_path / "file.pkl")(example)
+
+    assert wrapped.record is True
+    assert wrapped.file == tmp_path / "file.pkl"
+    assert wrapped.__name__ == "example"
+    assert wrapped()
+    assert len(wrapped.calls) > 0
+
+    mock_save.assert_called_once_with(tmp_path / "file.pkl")
+
+
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._save")
+def test_set_replay_compatible(mock_save: Mock, tmp_path: Path):
+    @set_replay(record=True)
+    @patch_replay(f"{__name__}.identity")
+    def example():
+        return identity(1) == 1
+
+    wrapped = set_replay(record=True, file=tmp_path / "file.pkl")(example)
+
+    assert wrapped.record is True
+    assert wrapped.file == tmp_path / "file.pkl"
+    assert wrapped.__name__ == "example"
+    assert wrapped()
+    assert len(wrapped.calls) > 0
+
+    mock_save.assert_called_once_with(tmp_path / "file.pkl")
+
+
+def test_set_replay_rejects_incompatible():
+    wrapped = set_replay(record=True)(identity)
+
+    with pytest.raises(AttributeError):
+        set_replay(record=False)(wrapped)
 
 
 def test_set_replay_and_patch_replay_support_class_decorators():

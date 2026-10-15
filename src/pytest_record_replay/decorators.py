@@ -10,6 +10,7 @@ from pytest_record_replay.funcwcalls import (
 )
 from pytest_record_replay.mock import MockR
 from pytest_record_replay.typing import P, R, R_, T
+from pytest_record_replay.util import none_xor
 
 
 def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
@@ -53,20 +54,37 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
         A decorator that wraps the function and exposes its call metadata.
 
     Raises:
-        AttributeError: If the function already has replay call metadata.
+        AttributeError: If the function already has replay call metadata
+        incompatible with this decorator.
     """
 
     def wrapper(
-        func: Callable[P, R],
+        func: Union[Callable[P, R], FunctionWCalls[P, R]],
     ):
         if isinstance(func, FunctionWCalls):
-            raise AttributeError(
-                "@set_replay should be applied before any @patch_replay decorator."
-            )
+            _func = func._func
+            try:
+                _record = none_xor(record, func._record)
+                _calls = func.calls
+                _file = none_xor(file, func.file)
+            except ValueError as e:
+                raise AttributeError(
+                    "Incompatible set_replay decorator.\n"
+                    "Trying to replace:\n"
+                    f"record: {record}->{func._record}\n"
+                    f"file: {file}->{func.file}\n"
+                ) from e
+        else:
+            _func = func
+            _record = record
+            _calls = []
+            _file = file
+
         return FunctionWCalls(
-            func,
-            record=record,
-            file=file,
+            _func,
+            record=_record,
+            calls=_calls,
+            file=_file,
         )
 
     return _allow_class(wrapper)
@@ -91,7 +109,6 @@ def patcher_replay(
     """
     if not isinstance(func, FunctionWCalls):
         func = set_replay()(func)
-        assert not isinstance(func, type)
 
     return func.decorated(patch(target, MockR(target, calls=func.calls)))
 
