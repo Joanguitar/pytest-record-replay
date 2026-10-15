@@ -2,20 +2,13 @@ import pytest
 
 from pytest_record_replay.util import record
 from pytest_record_replay.mock import MockR
-
-
-def identity(value=None):
-    return value
-
-
-def dependency(value):
-    return f"result: {value}"
+from helpers import dependency
 
 
 def test_record_and_recall_keyword_arguments():
     calls = []
 
-    mockr = MockR("dependency", calls=calls)
+    mockr = MockR(f"{__name__}.dependency", calls=calls)
     with record(True):
         assert mockr(value="recorded") == "result: recorded"
     with record(False):
@@ -24,7 +17,7 @@ def test_record_and_recall_keyword_arguments():
 
 def test_recall_rejects_keyword_argument_mismatch():
     calls = []
-    mockr = MockR("dependency", calls=calls)
+    mockr = MockR(f"{__name__}.dependency", calls=calls)
     with record(True):
         mockr(value="expected")
 
@@ -86,10 +79,10 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
 
 def test_recall_wrong_target_raises_value_error():
     calls = []
-    mockr = MockR("dependency", calls=calls)
+    mockr = MockR("helpers.dependency", calls=calls)
     with record(True):
         mockr(value="expected")
 
     with pytest.raises(ValueError, match="Target mismatch"):
         with record(False):
-            MockR("identity", calls=calls)(value="expected")
+            MockR("helpers.identity", calls=calls)(value="expected")

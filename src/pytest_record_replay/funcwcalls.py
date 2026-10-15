@@ -132,9 +132,13 @@ class FunctionWCalls(Generic[P, R]):
 
     @property
     def func(self) -> Callable[P, R]:
-        if self._instance is not None:
-            return self._func.__get__(self._instance, self._owner)
+        if self.instance is not None:
+            return self._func.__get__(self.instance, self._owner)
         return self._func
+
+    @property
+    def instance(self):
+        return self._instance or getattr(self._func, "__self__", None)
 
     def decorated(
         self, decorator: Callable[[Callable[P, R]], Callable[P_, R_]]
@@ -186,7 +190,7 @@ class FunctionWCalls(Generic[P, R]):
     def _call_recall_files(self, *args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore
         """Replay each saved call file in sorted order."""
         files = self.files
-        assert len(files) > 0, "No recorded calls found."
+        assert len(files) > 0, "No recordings found."
         for ii, file in enumerate(files):
             self._load(file)
             if ii > 0:
@@ -195,12 +199,11 @@ class FunctionWCalls(Generic[P, R]):
 
     def _TestCaseReset(self) -> bool:
         """Reset a bound ``unittest.TestCase`` between recording files."""
-        if hasattr(self._func, "__self__"):
-            testcase = self.func.__self__  # type: ignore
-            if isinstance(testcase, unittest.TestCase):
-                testcase.tearDown()
-                testcase.setUp()
-                return True
+        instance = self.instance
+        if isinstance(instance, unittest.TestCase):
+            instance.tearDown()
+            instance.setUp()
+            return True
         return False
 
     @property
@@ -215,10 +218,9 @@ class FunctionWCalls(Generic[P, R]):
         path = Path(inspect.getfile(function))
         path = path.parent / "resources_pytest_record_replay" / path.stem
         # If the function is a method, include the class name in the file path
-        if inspect.ismethod(self._func):
-            instance = self._func.__self__
-            if instance is not None:
-                path = path / instance.__class__.__name__
+        instance = self.instance
+        if instance is not None:
+            path = path / instance.__class__.__name__
 
         path = path / function.__name__
         return path
