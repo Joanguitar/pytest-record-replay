@@ -116,3 +116,19 @@ def _update_argument(target: R, updated: Optional[R]) -> None:
             _update_argument(value, updated[key])
         return
     raise TypeError(f"Cannot update mutable argument of type {type(target).__name__}.")
+
+
+def none_xor(a, b):
+    """Choose a non-None mode, rejecting duplicate explicit modes.
+
+    If either argument is ``None``, return the other. If both are set and
+    differ, return ``a``; if they are equal, raise ``ValueError``.
+    """
+    if a is None:
+        return b
+    elif b is None:
+        return a
+    elif b == a:
+        return a
+    else:
+        raise ValueError("FunctionWCalls already has a record mode.")

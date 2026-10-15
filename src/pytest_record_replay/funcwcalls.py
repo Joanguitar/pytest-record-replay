@@ -145,7 +145,7 @@ class FunctionWCalls(Generic[P, R]):
     ) -> FunctionWCalls[P_, R_]:
         new_func = decorator(self._func)
         return FunctionWCalls(
-            new_func, record=self.record, calls=self.calls, file=self.file
+            new_func, record=self._record, calls=self.calls, file=self.file
         )
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
