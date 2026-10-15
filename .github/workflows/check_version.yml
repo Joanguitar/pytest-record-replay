@@ -8,65 +8,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Verify package version was bumped
+      - name: Get PyPi version
+        id: pypi-version
+        run: |
+          pip install pytest-record-replay
+          echo "version=$(python -c 'import pytest_record_replay; print(pytest_record_replay.__version__)')" >> "$GITHUB_OUTPUT"
+      - name: Get current version
+        id: current-version
+        run: |
+          pip install -e .
+          echo "version=$(python -c 'import pytest_record_replay; print(pytest_record_replay.__version__)')" >> "$GITHUB_OUTPUT"
+      - name: Check version
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PYPI_VERSION: ${{ steps.pypi-version.outputs.version }}
+          CURRENT_VERSION: ${{ steps.current-version.outputs.version }}
         run: |
           python - <<'PY'
-          import ast
           import os
-          import re
-          import subprocess
+          from packaging.version import Version
 
-          version_file = "src/pytest_record_replay/__init__.py"
-
-          def read_version(source):
-              module = ast.parse(source)
-              for node in module.body:
-                  if isinstance(node, ast.Assign):
-                      targets = node.targets
-                  elif isinstance(node, ast.AnnAssign):
-                      targets = [node.target]
-                  else:
-                      continue
-                  if any(
-                      isinstance(target, ast.Name) and target.id == "__version__"
-                      for target in targets
-                  ):
-                      value = ast.literal_eval(node.value)
-                      if isinstance(value, str):
-                          return value
-              raise ValueError(f"Could not find a string __version__ in {version_file}")
-
-          def version_parts(version):
-              if not re.fullmatch(r"\d+(?:\.\d+)*", version):
-                  raise ValueError(
-                      f"Version {version!r} must contain dot-separated numeric components"
-                  )
-              parts = tuple(int(part) for part in version.split("."))
-              while len(parts) > 1 and parts[-1] == 0:
-                  parts = parts[:-1]
-              return parts
-
-          base_sha = os.environ["BASE_SHA"]
-          if not base_sha or set(base_sha) == {"0"}:
-              raise SystemExit("Cannot check for a version bump: push has no previous commit")
-
-          previous_source = subprocess.check_output(
-              ["git", "show", f"{base_sha}:{version_file}"], text=True
-          )
-          with open(version_file, encoding="utf-8") as source_file:
-              current_source = source_file.read()
-
-          previous_version = read_version(previous_source)
-          current_version = read_version(current_source)
-          if version_parts(current_version) <= version_parts(previous_version):
+          pypi_version = Version(os.environ["PYPI_VERSION"])
+          current_version = Version(os.environ["CURRENT_VERSION"])
+          if current_version <= pypi_version:
               raise SystemExit(
-                  f"Package version must increase: "
-                  f"{previous_version} -> {current_version}"
+                  f"Current version must be greater than PyPI: "
+                  f"{current_version} <= {pypi_version}"
               )
-
-          print(f"Package version increased: {previous_version} -> {current_version}")
+          print(f"Current version is newer than PyPI: {current_version} > {pypi_version}")
           PY
