@@ -11,7 +11,7 @@ from pytest_record_replay.decorators import (
     set_replay,
 )
 import pytest_record_replay.util as util_module
-from pytest_record_replay.util import record, recording, _decorate_class
+from pytest_record_replay.util import record, recording, _decorate_class, set_calls
 from pytest_record_replay.typing import Call
 from pytest_record_replay.funcwcalls import FunctionWCalls
 from helpers import (
@@ -213,3 +213,34 @@ def test_recording_testcase_will_always_save(mock_save: Mock):
 
     _decorate_class(RecordingTestClass, _eval_method)
     assert counter > 0
+
+
+def test_patch_context_set_calls():
+    calls = []
+    for _r in [True, False]:
+        with set_calls(calls), record(_r):
+            assert multiply(1) == 2
+            with patch_replay(f"{__name__}.multiply") as mock_multiply:
+                assert multiply(2) == 4
+                mock_multiply.assert_called_once()
+        assert len(calls) == _r
+        if _r:
+            assert calls[0].args == (2,)  # Only the second call got recorded
+
+
+def test_patch_context_set_recall(tmp_path: Path):
+    @set_replay(file=tmp_path / "file.pkl")
+    def fwcalls():
+        assert multiply(1) == 2
+        with patch_replay(f"{__name__}.multiply") as mock_multiply:
+            assert multiply(2) == 4
+            mock_multiply.assert_called_once()
+
+    for _r in [True, False]:
+        with record(_r):
+            fwcalls()
+            assert len(fwcalls.calls) == _r
+            if _r:
+                assert fwcalls.calls[0].args == (
+                    2,
+                )  # Only the second call got recorded
