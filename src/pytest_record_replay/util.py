@@ -10,18 +10,24 @@ from collections.abc import (
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Optional, Generator
+from typing import TYPE_CHECKING, Callable, List, Optional, Generator, Union, overload
+from unittest.mock import patch
 
 import dill
 
-from pytest_record_replay.typing import R
+from pytest_record_replay.typing import P, R, R_, T, Call
 
+if TYPE_CHECKING:
+    from pytest_record_replay.funcwcalls import FunctionWCalls
 
 _recording = False
 _recording_context: ContextVar[Optional[bool]] = ContextVar(
     "pytest_record_replay_recording", default=None
 )
 timestamp = datetime.now().isoformat().replace(":", "-")
+_calls_context: ContextVar[Optional[List[Call]]] = ContextVar(
+    "pytest_record_replay_set_calls", default=None
+)
 
 
 def recording() -> bool:
@@ -35,7 +41,7 @@ def recording() -> bool:
 
 
 @contextmanager
-def record(recording_value: bool) -> Generator[None, None, None]:
+def record(recording_value: bool) -> Generator[bool, None, None]:
     """Temporarily set the context-local recording mode.
 
     The previous context-local mode is restored when the context exits,
@@ -43,9 +49,26 @@ def record(recording_value: bool) -> Generator[None, None, None]:
     """
     token = _recording_context.set(recording_value)
     try:
-        yield
+        yield recording_value
     finally:
         _recording_context.reset(token)
+
+
+@contextmanager
+def set_calls(calls: Optional[List[Call]] = None) -> Generator[List[Call], None, None]:
+    calls = [] if calls is None else calls
+    token = _calls_context.set(calls)
+    try:
+        yield calls
+    finally:
+        _calls_context.reset(token)
+
+
+def get_calls() -> List[Call]:
+    calls = _calls_context.get()
+    if calls is None:
+        raise RuntimeError("get_calls called outside set_calls context. Did you forget to use @set_replay?")
+    return calls
 
 
 def _configure_patch(record: bool):
@@ -142,3 +165,36 @@ def none_xor(a, b):
         return a
     else:
         raise ValueError("FunctionWCalls already has a record mode.")
+
+
+
+def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
+    """Apply ``func`` to each callable test method on ``obj``."""
+    for attr in dir(obj):
+        if not attr.startswith(patch.TEST_PREFIX):
+            continue
+
+        attr_value = getattr(obj, attr)
+        if not hasattr(attr_value, "__call__"):
+            continue
+
+        setattr(obj, attr, func(attr_value))
+
+    return obj
+
+
+def _allow_class(
+    func: Callable[[Callable[P, R]], R_],
+):
+    """Adapt a function decorator to classes by decorating their test methods."""
+
+    @overload
+    def wrapped(obj: T) -> T: ...
+    @overload
+    def wrapped(obj: Callable[P, R]) -> R_: ...
+    def wrapped(obj: Union[type, Callable[P, R]]) -> Union[type, R_]:
+        if isinstance(obj, type):
+            return _decorate_class(obj, func)
+        return func(obj)
+
+    return wrapped

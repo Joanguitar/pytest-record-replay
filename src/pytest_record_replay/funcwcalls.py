@@ -12,7 +12,7 @@ import warnings
 import dill
 
 from pytest_record_replay.typing import Call, P, R, P_, R_
-from pytest_record_replay.util import record, recording, timestamp
+from pytest_record_replay.util import record, recording, set_calls, timestamp
 
 
 class FunctionWCalls(Generic[P, R]):
@@ -143,6 +143,16 @@ class FunctionWCalls(Generic[P, R]):
         return self._func
 
     @property
+    def func_r(self) -> Callable[P, R]:
+        """Return self.func with record and set_calls contexts."""
+        @wraps(self._func)
+        def func_r(*args: P.args, **kwargs: P.kwargs) -> R:
+            with record(self.record), set_calls(self.calls):
+                return self.func(*args, **kwargs)
+
+        return func_r
+
+    @property
     def instance(self):
         """Return the bound instance, or the wrapped method's bound instance."""
         return self._instance or getattr(self._func, "__self__", None)
@@ -158,10 +168,9 @@ class FunctionWCalls(Generic[P, R]):
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped function in the configured mode."""
-        with record(self.record):
-            if self.record:
-                return self._call_record(*args, **kwargs)
-            return self._call_recall(*args, **kwargs)
+        if self.record:
+            return self._call_record(*args, **kwargs)
+        return self._call_recall(*args, **kwargs)
 
     def _call_record(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the function and save its dependency calls.
@@ -173,12 +182,13 @@ class FunctionWCalls(Generic[P, R]):
             AssertionError: If the shared call history is not empty.
         """
         assert len(self.calls) == 0, "Calls should be empty before recording."
-        output = self.func(*args, **kwargs)
-        if self.file is None:
-            self.save(timestamp)
-        else:
-            self._save(self.file)
-        return output
+        with record(True):
+            output = self.func_r(*args, **kwargs)
+            if self.file is None:
+                self.save(timestamp)
+            else:
+                self._save(self.file)
+            return output
 
     def _call_recall(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Replay using the first available source of call history.
@@ -194,7 +204,7 @@ class FunctionWCalls(Generic[P, R]):
 
     def _call_recall_calls(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Run the function against in-memory calls and require full consumption."""
-        output = self.func(*args, **kwargs)
+        output = self.func_r(*args, **kwargs)
         assert len(self.calls) == 0, (
             f"Unconsumed calls remain after replaying {self.calls}."
         )
@@ -281,3 +291,9 @@ class FunctionWCalls(Generic[P, R]):
         """Save calls in the default directory as ``name`` with a ``.pkl`` suffix."""
         file = self.path / (name + ".pkl")
         self._save(file)
+
+
+def ensure_functionwcalls(function: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]]) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
+    if isinstance(function, FunctionWCalls):
+        return function
+    return FunctionWCalls(function)

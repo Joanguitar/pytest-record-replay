@@ -12,7 +12,7 @@ import dill
 
 from pytest_record_replay.typing import Call
 from pytest_record_replay import util
-from pytest_record_replay.util import _for_update, _update_argument
+from pytest_record_replay.util import _for_update, _update_argument, get_calls
 
 
 class MockR(ABC, Mock):
@@ -38,7 +38,7 @@ class MockR(ABC, Mock):
             args = args[1:]
         super().__init__(*args, **kwargs)
         self._target = target
-        self._calls = calls if calls is not None else []
+        self._calls: Optional[List[Call]] = calls
         self._instance: Optional[Any] = None
         self._owner: Optional[type] = None
         function = user_function
@@ -52,6 +52,11 @@ class MockR(ABC, Mock):
         if self._instance is not None:
             return self._function.__get__(self._instance, self._owner)
         return self._function
+
+    @property
+    def calls(self) -> List[Call]:
+        """Return the shared call history, or an empty list if none exists."""
+        return get_calls() if self._calls is None else self._calls
 
     def __get__(self, instance, owner=None):
         """Bind the original method to ``instance`` and return this mock."""
@@ -93,7 +98,7 @@ class MockR(ABC, Mock):
             key: _for_update(value, recorded_kwargs[key])
             for key, value in kwargs.items()
         }
-        self._calls.append(
+        self.calls.append(
             Call(
                 target=self._target,
                 args=recorded_args,
@@ -113,7 +118,7 @@ class MockR(ABC, Mock):
             ValueError: If the saved target or arguments do not match this call.
             TypeError: If a saved argument update cannot be applied.
         """
-        call = self._calls.pop(0)
+        call = self.calls.pop(0)
         if call.target != self._target:
             raise ValueError(
                 f"Target mismatch: expected {call.target}, got {self._target}"

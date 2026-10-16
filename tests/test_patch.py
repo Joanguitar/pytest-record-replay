@@ -6,13 +6,12 @@ import pytest
 import helpers
 from pytest_record_replay.mock import MockR
 from pytest_record_replay.decorators import (
-    _decorate_class,
     patcher_replay,
     patch_replay,
     set_replay,
 )
 import pytest_record_replay.util as util_module
-from pytest_record_replay.util import record, recording
+from pytest_record_replay.util import record, recording, _decorate_class
 from pytest_record_replay.typing import Call
 from pytest_record_replay.funcwcalls import FunctionWCalls
 from helpers import (
