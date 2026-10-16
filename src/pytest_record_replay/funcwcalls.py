@@ -145,6 +145,7 @@ class FunctionWCalls(Generic[P, R]):
     @property
     def func_r(self) -> Callable[P, R]:
         """Return self.func with record and set_calls contexts."""
+
         @wraps(self._func)
         def func_r(*args: P.args, **kwargs: P.kwargs) -> R:
             with record(self.record), set_calls(self.calls):
@@ -293,7 +294,9 @@ class FunctionWCalls(Generic[P, R]):
         self._save(file)
 
 
-def ensure_functionwcalls(function: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]]) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
+def ensure_functionwcalls(
+    function: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]],
+) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
     if isinstance(function, FunctionWCalls):
         return function
     return FunctionWCalls(function)

@@ -9,6 +9,7 @@ def test_recording_race_condition():
         "func1": None,
         "func2": None,
     }
+
     def func1():
         with record(True):
             sleep(0.1)

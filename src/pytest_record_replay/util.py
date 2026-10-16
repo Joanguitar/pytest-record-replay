@@ -10,15 +10,12 @@ from collections.abc import (
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, List, Optional, Generator, Union, overload
+from typing import Callable, List, Optional, Generator, Union, overload
 from unittest.mock import patch
 
 import dill
 
 from pytest_record_replay.typing import P, R, R_, T, Call
-
-if TYPE_CHECKING:
-    from pytest_record_replay.funcwcalls import FunctionWCalls
 
 _recording = False
 _recording_context: ContextVar[Optional[bool]] = ContextVar(
@@ -67,7 +64,9 @@ def set_calls(calls: Optional[List[Call]] = None) -> Generator[List[Call], None,
 def get_calls() -> List[Call]:
     calls = _calls_context.get()
     if calls is None:
-        raise RuntimeError("get_calls called outside set_calls context. Did you forget to use @set_replay?")
+        raise RuntimeError(
+            "get_calls called outside set_calls context. Did you forget to use @set_replay?"
+        )
     return calls
 
 
@@ -165,7 +164,6 @@ def none_xor(a, b):
         return a
     else:
         raise ValueError("FunctionWCalls already has a record mode.")
-
 
 
 def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
