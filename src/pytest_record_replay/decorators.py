@@ -1,6 +1,5 @@
 """Decorators for recording and replaying patched dependencies."""
 
-from functools import partial
 from pathlib import Path
 from types import TracebackType
 from typing import Callable, Optional, Type, Union
@@ -64,28 +63,32 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     return _allow_class(wrapper)
 
 
-def patcher_replay(
-    func: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]],
-    target: str,
-):
-    """Decorate a function so calls to ``target`` are recorded or replayed.
+class patcher_replay:
+    def __init__(self, target: str):
+        self.target = target
+        self.mock = MockR(self.target)
+        self.patch = patch(self.target, self.mock)
 
-    Plain functions are first wrapped using the active recording mode.
-    Functions already carrying replay metadata retain their recording mode,
-    call history, and file. In either case, a new ``FunctionWCalls`` wrapper
-    invokes the function with ``target`` patched.
+    def __call__(self, func: Union[type, Callable[P, R]]):
+        @_allow_class
+        def __call(func: Callable[P, R]):
+            _func = func if isinstance(func, FunctionWCalls) else set_replay()(func)
+            return _func.decorated(
+                patch(self.target, MockR(self.target, calls=_func.calls))
+            )
 
-    Args:
-        func: The test function to wrap, or its ``FunctionWCalls`` metadata.
-        target: The fully qualified name of the dependency to patch.
+        return __call(func)
 
-    Returns:
-        The wrapped test function.
-    """
-    if not isinstance(func, FunctionWCalls):
-        func = set_replay()(func)
+    def __enter__(self) -> MockR:
+        return self.patch.__enter__()
 
-    return func.decorated(patch(target, MockR(target, calls=func.calls)))
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        return self.patch.__exit__(exc_type, exc_value, traceback)
 
 
 def patch_replay(target: str):
@@ -98,5 +101,4 @@ def patch_replay(target: str):
         A decorator suitable for applying to a test function or a test class.
         When given a class, the patch is applied to each callable test method.
     """
-    _patcher = partial(patcher_replay, target=target)
-    return _allow_class(_patcher)
+    return patcher_replay(target)

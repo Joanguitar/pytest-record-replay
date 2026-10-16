@@ -108,7 +108,7 @@ def test_replay_patch_preserves_existing_functionwcalls_metadata(
     wrapped = set_replay(record=record, file=file)(dependency)
     function_with_calls = wrapped
 
-    patched = patcher_replay(function_with_calls, target)
+    patched = patcher_replay(target)(function_with_calls)
 
     assert isinstance(patched, FunctionWCalls)
     assert patched.record == record
