@@ -47,6 +47,17 @@ def test_recording_will_always_save(mock_save: Mock):
     mock_save.assert_called_once()
 
 
+@set_replay()
+def test_patch_mid_function():
+    with counting() as count:
+        assert multiply(1) == 2
+        with patch_replay(f"{__name__}.multiply") as mock_multiply:
+            assert multiply(2) == 4
+            mock_multiply.assert_called_once()
+        assert multiply(3) == 6
+        assert count["multiply"] == 2 + recording()
+
+
 def example():
     with counting() as count:
         assert multiply(10) == 20

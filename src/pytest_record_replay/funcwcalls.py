@@ -292,11 +292,3 @@ class FunctionWCalls(Generic[P, R]):
         """Save calls in the default directory as ``name`` with a ``.pkl`` suffix."""
         file = self.path / (name + ".pkl")
         self._save(file)
-
-
-def ensure_functionwcalls(
-    function: Union[Callable[P, R], FunctionWCalls[P, R], FunctionWCalls[P, None]],
-) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]:
-    if isinstance(function, FunctionWCalls):
-        return function
-    return FunctionWCalls(function)

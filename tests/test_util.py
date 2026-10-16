@@ -1,7 +1,9 @@
 from threading import Thread
 from time import sleep
 from typing import Dict, Optional
-from pytest_record_replay.util import record, recording
+
+import pytest
+from pytest_record_replay.util import get_calls, record, recording
 
 
 def test_recording_race_condition():
@@ -32,3 +34,7 @@ def test_recording_race_condition():
 
     assert was_recording["func1"]
     assert not was_recording["func2"]
+
+
+def test_get_calls_outside_of_context():
+    pytest.raises(RuntimeError, get_calls)

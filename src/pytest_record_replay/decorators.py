@@ -2,14 +2,14 @@
 
 from pathlib import Path
 from types import TracebackType
-from typing import Callable, Optional, Type, Union
+from typing import Callable, Optional, Type, Union, overload
 from unittest.mock import patch
 
 from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
 )
 from pytest_record_replay.mock import MockR
-from pytest_record_replay.typing import P, R
+from pytest_record_replay.typing import P, R, T
 from pytest_record_replay.util import none_xor, _allow_class
 
 
@@ -69,15 +69,24 @@ class patcher_replay:
         self.mock = MockR(self.target)
         self.patch = patch(self.target, self.mock)
 
-    def __call__(self, func: Union[type, Callable[P, R]]):
+    @overload
+    def __call__(self, obj: T) -> T: ...
+    @overload
+    def __call__(
+        self, obj: Callable[P, R]
+    ) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, None]]: ...
+
+    def __call__(
+        self, obj: Union[T, Callable[P, R]]
+    ) -> Union[T, FunctionWCalls[P, R], FunctionWCalls[P, None]]:
         @_allow_class
-        def __call(func: Callable[P, R]):
-            _func = func if isinstance(func, FunctionWCalls) else set_replay()(func)
-            return _func.decorated(
-                patch(self.target, MockR(self.target, calls=_func.calls))
+        def __call(obj: Callable[P, R]):
+            func = obj if isinstance(obj, FunctionWCalls) else set_replay()(obj)
+            return func.decorated(
+                patch(self.target, MockR(self.target, calls=func.calls))
             )
 
-        return __call(func)
+        return __call(obj)
 
     def __enter__(self) -> MockR:
         return self.patch.__enter__()
