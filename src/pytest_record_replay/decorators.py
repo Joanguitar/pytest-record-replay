@@ -2,47 +2,16 @@
 
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Union, overload
+from types import TracebackType
+from typing import Callable, Optional, Type, Union
 from unittest.mock import patch
 
 from pytest_record_replay.funcwcalls import (
     FunctionWCalls,
 )
 from pytest_record_replay.mock import MockR
-from pytest_record_replay.typing import P, R, R_, T
-from pytest_record_replay.util import none_xor
-
-
-def _decorate_class(obj: type, func: Callable[[Callable[P, R]], R_]) -> type:
-    """Apply ``func`` to each callable test method on ``obj``."""
-    for attr in dir(obj):
-        if not attr.startswith(patch.TEST_PREFIX):
-            continue
-
-        attr_value = getattr(obj, attr)
-        if not hasattr(attr_value, "__call__"):
-            continue
-
-        setattr(obj, attr, func(attr_value))
-
-    return obj
-
-
-def _allow_class(
-    func: Callable[[Callable[P, R]], R_],
-):
-    """Adapt a function decorator to classes by decorating their test methods."""
-
-    @overload
-    def wrapped(obj: T) -> T: ...
-    @overload
-    def wrapped(obj: Callable[P, R]) -> R_: ...
-    def wrapped(obj: Union[type, Callable[P, R]]) -> Union[type, R_]:
-        if isinstance(obj, type):
-            return _decorate_class(obj, func)
-        return func(obj)
-
-    return wrapped
+from pytest_record_replay.typing import P, R
+from pytest_record_replay.util import none_xor, _allow_class
 
 
 def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
