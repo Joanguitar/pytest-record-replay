@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest import TestCase
 from unittest.mock import Mock, patch
 
 import pytest
@@ -205,7 +206,6 @@ def test_recording_testcase_will_always_save(mock_save: Mock):
 
     def _eval_method(method):
         nonlocal counter
-        print(method.__name__)
         method(recording_test)
         mock_save.assert_called_once()
         mock_save.reset_mock()
@@ -244,3 +244,111 @@ def test_patch_context_set_recall(tmp_path: Path):
                 assert fwcalls.calls[0].args == (
                     2,
                 )  # Only the second call got recorded
+
+
+def test_replay_path_and_file():
+    with pytest.raises(AttributeError):
+        set_replay(path=Path("path"), file=Path("file"))(lambda x: x)
+
+
+def example():
+    with counting() as count:
+        assert multiply(10) == 20
+        assert describe("test") == {"name": "test", "active": True}
+        for key in ["multiply", "describe"]:
+            assert count[key] == recording()
+
+
+example_calls = []
+with record(True), set_calls(example_calls), patch_replay(f"{__name__}.multiply"), patch_replay(
+    f"{__name__}.describe"
+):
+    example()
+
+def test_patched_classes(tmp_path: Path):
+
+
+    @set_replay(path=tmp_path)
+    @patch_replay(f"{__name__}.multiply")
+    @patch_replay(f"{__name__}.describe")
+    class TestDecoratedClass(TestCase):
+        """Decorated class"""
+
+        def test_example(self):
+            example()
+
+
+    class TestDecoratedMethod(TestCase):
+        """Class with decorated methods"""
+
+        @set_replay(path=tmp_path)
+        @patch_replay(f"{__name__}.multiply")
+        @patch_replay(f"{__name__}.describe")
+        def test_example(self):
+            example()
+
+
+    @set_replay(path=tmp_path)
+    @patch_replay(f"{__name__}.multiply")
+    class TestDecoratedClassAndMethod(TestCase):
+        """Decorated class with decorated methods"""
+
+        @patch_replay(f"{__name__}.describe")
+        def test_example(self):
+            example()
+
+
+    class TestAPosteriori(TestCase):
+        """Class with methods that are decorated a posteriori"""
+
+        def test_example(self):
+            example()
+
+
+    TestAPosteriori.test_example = set_replay(path=tmp_path)(patch_replay(f"{__name__}.multiply")(
+        patch_replay(f"{__name__}.describe")(TestAPosteriori.test_example)
+    ))
+
+    for _r in [True, False]:
+        with record(_r):
+            assert recording() == _r
+            for test_case in [
+                TestDecoratedClass,
+                TestDecoratedMethod,
+                TestDecoratedClassAndMethod,
+                TestAPosteriori,]:
+                test_case("test_example").run()
+
+
+@pytest.mark.parametrize("n_files", [1, 2, 5])
+@patch("pytest_record_replay.funcwcalls.FunctionWCalls._load")
+def test_multiple_files(mock_load: Mock, monkeypatch, n_files: int):
+    monkeypatch.setattr(FunctionWCalls, "files", [Path(f"file{ii}.pkl") for ii in range(n_files)])
+    mock_load.side_effect = lambda _: example_calls.copy()
+
+    @set_replay(record=False)
+    @patch_replay(f"{__name__}.multiply")
+    @patch_replay(f"{__name__}.describe")
+    class TestDecoratedClass(TestCase):
+        """Decorated class"""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.setup_called = 0
+            self.teardown_called = 0
+
+        def setUp(self):
+            self.setup_called += 1
+
+        def tearDown(self):
+            self.teardown_called += 1
+
+        def test_example(self):
+            example()
+
+    # Hacky way of running test_example
+    test = TestDecoratedClass("test_example")
+    test.run()
+
+    assert test.setup_called == n_files
+    assert test.teardown_called == n_files

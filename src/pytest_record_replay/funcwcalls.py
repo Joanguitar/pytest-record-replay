@@ -40,6 +40,7 @@ class FunctionWCalls(Generic[P, R]):
         record: Literal[False] = ...,
         calls: None = ...,
         file: None = ...,
+        path: None = ...,
     ) -> FunctionWCalls[P, None]: ...
 
     @overload
@@ -50,6 +51,7 @@ class FunctionWCalls(Generic[P, R]):
         file: Path,
         record: Optional[bool] = ...,
         calls: Optional[List[Call]] = ...,
+        path: Optional[Path] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
     @overload
@@ -60,6 +62,7 @@ class FunctionWCalls(Generic[P, R]):
         calls: List[Call],
         record: Optional[bool] = ...,
         file: Optional[Path] = ...,
+        path: Optional[Path] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
     @overload
@@ -70,6 +73,7 @@ class FunctionWCalls(Generic[P, R]):
         record: Literal[True],
         file: Optional[Path] = ...,
         calls: Optional[List[Call]] = ...,
+        path: Optional[Path] = ...,
     ) -> FunctionWCalls[P, R]: ...
 
     @overload
@@ -80,6 +84,7 @@ class FunctionWCalls(Generic[P, R]):
         record: Optional[bool] = None,
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
+        path: Optional[Path] = None,
     ) -> Union[FunctionWCalls[P, R], FunctionWCalls[P, R]]: ...
 
     def __new__(
@@ -89,6 +94,7 @@ class FunctionWCalls(Generic[P, R]):
         record: Optional[bool] = False,
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
+        path: Optional[Path] = None,
     ) -> FunctionWCalls[P, Any]:
         return super().__new__(cls)
 
@@ -99,6 +105,7 @@ class FunctionWCalls(Generic[P, R]):
         record: Optional[bool] = None,
         calls: Optional[List[Call]] = None,
         file: Optional[Path] = None,
+        path: Optional[Path] = None,
     ):
         """Initialize call tracking for ``function``.
 
@@ -123,8 +130,14 @@ class FunctionWCalls(Generic[P, R]):
             if self.record:
                 raise ValueError("Calls should be empty when recording.")
             if file is not None:
-                warnings.warn("Both calls and file provided. Using calls.")
+                raise AttributeError("Both calls and file provided.")
+            if path is not None:
+                raise AttributeError("Both calls and path provided.")
+        else:
+            if path is not None and file is not None:
+                raise AttributeError("Both path and file provided.")
         self.file = file
+        self._path = path
         self._instance = None
         self._owner = None
         wraps(function)(self)
@@ -214,7 +227,7 @@ class FunctionWCalls(Generic[P, R]):
     def _call_recall_file(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Load the configured file and replay its calls once."""
         assert self.file is not None
-        self._load(self.file)
+        self.load(self.file)
         return self._call_recall_calls(*args, **kwargs)
 
     def _call_recall_files(self, *args: P.args, **kwargs: P.kwargs) -> R:  # type: ignore
@@ -229,7 +242,7 @@ class FunctionWCalls(Generic[P, R]):
         files = self.files
         assert len(files) > 0, "No recordings found."
         for ii, file in enumerate(files):
-            self._load(file)
+            self.load(file)
             if ii > 0:
                 self._TestCaseReset()
             self._call_recall_calls(*args, **kwargs)
@@ -259,6 +272,8 @@ class FunctionWCalls(Generic[P, R]):
         The path is based on the source module and function name, with a class
         name component when the wrapped function is bound to an instance.
         """
+        if self._path is not None:
+            return self._path
         function = inspect.unwrap(self._func)
         path = Path(inspect.getfile(function))
         path = path.parent / "resources_pytest_record_replay" / path.stem
@@ -281,12 +296,16 @@ class FunctionWCalls(Generic[P, R]):
         with open(file, "wb") as f:
             dill.dump(self.calls, f)
 
-    def _load(self, file: Path):
+    def _load(self, file: Path) -> List[Call]:
         """Load calls from ``file``, replacing the existing in-memory history."""
         with open(file, "rb") as f:
-            calls_data = dill.load(f)
-            self.calls.clear()
-            self.calls.extend(calls_data)
+            return dill.load(f)
+
+    def load(self, file: Path):
+        """Load calls from ``file`` and replace the existing in-memory history."""
+        calls_data = self._load(file)
+        self.calls.clear()
+        self.calls.extend(calls_data)
 
     def save(self, name: str):
         """Save calls in the default directory as ``name`` with a ``.pkl`` suffix."""

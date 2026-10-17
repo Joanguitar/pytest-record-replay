@@ -99,15 +99,23 @@ def test_function_wrapper_rejects_calls_when_recording():
         FunctionWCalls(identity, record=True, calls=calls)
 
 
-def test_function_wrapper_warns_when_calls_and_file_are_provided(tmp_path):
+def test_function_wrapper_warns(tmp_path):
     calls = [Call("identity", (), {}, None)]
 
-    with pytest.warns(UserWarning, match="Both calls and file provided"):
-        funcwcalls = FunctionWCalls(
+    with pytest.raises(AttributeError):
+        FunctionWCalls(
             identity, calls=calls, file=tmp_path / "calls.pkl", record=False
         )
 
-    assert funcwcalls.calls is calls
+    with pytest.raises(AttributeError):
+        FunctionWCalls(
+            identity, calls=calls, path=tmp_path, record=False
+        )
+
+    with pytest.raises(AttributeError):
+        FunctionWCalls(
+            identity, file=tmp_path / "calls.pkl", path=tmp_path, record=False
+        )
 
 
 def test_recall_rejects_unconsumed_in_memory_calls():
@@ -216,7 +224,7 @@ def test_pickle_files_are_sorted_and_save_load_round_trip(tmp_path, monkeypatch)
     assert [path.name for path in funcwcalls.files] == ["a-first.pkl", "z-last.pkl"]
 
     funcwcalls.calls.clear()
-    funcwcalls._load(funcwcalls.files[0])
+    funcwcalls.load(funcwcalls.files[0])
     assert funcwcalls.calls == [
         Call("identity", ("value",), {}, "value", post_args=(None,), post_kwargs={})
     ]
@@ -241,7 +249,7 @@ def test_pickle_preserves_python_value_types(tmp_path, monkeypatch):
     funcwcalls.save("typed-values")
 
     funcwcalls.calls.clear()
-    funcwcalls._load(funcwcalls.files[0])
+    funcwcalls.load(funcwcalls.files[0])
 
     assert funcwcalls.calls == [original]
     assert isinstance(funcwcalls.calls[0].args[0], bytes)

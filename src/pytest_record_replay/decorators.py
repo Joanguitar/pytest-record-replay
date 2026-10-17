@@ -13,7 +13,7 @@ from pytest_record_replay.typing import P, R, T
 from pytest_record_replay.util import none_xor, _allow_class
 
 
-def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
+def set_replay(record: Optional[bool] = None, file: Optional[Path] = None, path: Optional[Path] = None):
     """Wrap a function with replay call tracking, without patching a dependency.
 
     Args:
@@ -32,14 +32,15 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
     """
 
     def wrapper(
-        func: Union[Callable[P, R], FunctionWCalls[P, R]],
+        func: Callable[P, R],
     ):
         if isinstance(func, FunctionWCalls):
             _func = func._func
             try:
                 _record = none_xor(record, func._record)
-                _calls = func.calls
+                _calls = func.calls.copy()
                 _file = none_xor(file, func.file)
+                _path = none_xor(path, func._path)
             except ValueError as e:
                 raise AttributeError(
                     "Incompatible set_replay decorator.\n"
@@ -52,12 +53,14 @@ def set_replay(record: Optional[bool] = None, file: Optional[Path] = None):
             _record = record
             _calls = []
             _file = file
+            _path = path
 
         return FunctionWCalls(
             _func,
             record=_record,
             calls=_calls,
             file=_file,
+            path=_path,
         )
 
     return _allow_class(wrapper)
@@ -83,7 +86,7 @@ class patcher_replay:
         def __call(obj: Callable[P, R]):
             func = obj if isinstance(obj, FunctionWCalls) else set_replay()(obj)
             return func.decorated(
-                patch(self.target, MockR(self.target, calls=func.calls))
+                patch(self.target, MockR(self.target))
             )
 
         return __call(obj)
