@@ -20,6 +20,17 @@ To install a local checkout for development, including the test dependencies:
 python -m pip install -e ".[test]"
 ```
 
+## Overview
+
+- [`set_replay(record=None, file=None)`](#set_replay) configures a test's recording/replay
+  behavior without patching a dependency. `record: bool` optionally forces recording
+  (`True`) or replay (`False`); when omitted, the active pytest mode is used (`pytest --record` for recording).
+  `file: Path` optionally sets the pickle file used to save or load that test's calls.
+- [`patch_replay(target)`](#patch_replay) patches the dependency named by the dotted import path
+  `target: str`, recording its calls during recording and replaying them later.
+- [`recording()`](#check-recording-mode) returns whether the current run is recording. The
+  [`replay_recording` pytest fixture](#check-recording-mode) provides the same value to a test.
+
 ## `@patch_replay`
 
 Import `patch_replay` and decorate a test with the dotted name of the dependency
