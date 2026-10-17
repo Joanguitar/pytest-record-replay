@@ -48,6 +48,54 @@ def test_report():
     ...
 ```
 
+### Use `patch_replay` as a context manager
+
+Use `patch_replay` in a `with` block to patch a dependency for only part of a
+test. The context manager yields a mock, so you can make assertions about the
+calls while the patch is active. Decorate the test with `@set_replay()` so the
+calls are saved during recording and loaded during replay:
+
+```python
+from pytest_record_replay import patch_replay, set_replay
+from myapp import client
+
+
+@set_replay()
+def test_fetch_data():
+    with patch_replay("myapp.client.fetch_data") as mock_fetch:
+        assert client.fetch_data("item-1") == {"id": "item-1"}
+        mock_fetch.assert_called_once_with("item-1")
+```
+
+The patch is removed when the `with` block exits. As with the decorator, use
+the dotted name where the code under test looks up the dependency.
+
+### Use `patch_replay` as a fixture
+
+If several tests need the same patch, wrap it in a pytest fixture. Yielding the
+mock keeps the patch active for the test and automatically removes it when the
+fixture finishes:
+
+```python
+import pytest
+from pytest_record_replay import patch_replay, set_replay
+from myapp import client
+
+
+@pytest.fixture
+def fetch_data_mock():
+    with patch_replay("myapp.client.fetch_data") as mock_fetch:
+        yield mock_fetch
+
+
+@set_replay()
+def test_fetch_data(fetch_data_mock):
+    assert client.fetch_data("item-1") == {"id": "item-1"}
+    fetch_data_mock.assert_called_once_with("item-1")
+```
+
+See the [functional tests](tests/functional/) for runnable examples of decorating functions, TestCase, and using the context-manager and fixture patterns.
+
 ## `@set_replay`
 
 Use `@set_replay` to configure recording/replay metadata on a test without

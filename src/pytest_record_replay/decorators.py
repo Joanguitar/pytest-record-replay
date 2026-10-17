@@ -13,7 +13,11 @@ from pytest_record_replay.typing import P, R, T
 from pytest_record_replay.util import none_xor, _allow_class
 
 
-def set_replay(record: Optional[bool] = None, file: Optional[Path] = None, path: Optional[Path] = None):
+def set_replay(
+    record: Optional[bool] = None,
+    file: Optional[Path] = None,
+    path: Optional[Path] = None,
+):
     """Wrap a function with replay call tracking, without patching a dependency.
 
     Args:
@@ -85,9 +89,7 @@ class patcher_replay:
         @_allow_class
         def __call(obj: Callable[P, R]):
             func = obj if isinstance(obj, FunctionWCalls) else set_replay()(obj)
-            return func.decorated(
-                patch(self.target, MockR(self.target))
-            )
+            return func.decorated(patch(self.target, MockR(self.target)))
 
         return __call(obj)
 

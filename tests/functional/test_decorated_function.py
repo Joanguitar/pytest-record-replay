@@ -12,7 +12,10 @@ from pytest_record_replay.decorators import patch_replay, set_replay
 from pytest_record_replay.util import recording
 
 
-file = Path(__file__).parent / "resources_pytest_record_replay" / "decorated_function.pkl"
+file = (
+    Path(__file__).parent / "resources_pytest_record_replay" / "decorated_function.pkl"
+)
+
 
 def _function():
     with counting() as count:
@@ -21,6 +24,7 @@ def _function():
         for key in ["multiply", "describe"]:
             assert count[key] == recording()
     return True
+
 
 @patch_replay(f"{__name__}.multiply")
 def test_multiply_is_recorded():
@@ -52,17 +56,21 @@ def test_recording_will_always_save(mock_save: Mock):
     @patch_replay(f"{__name__}.multiply")
     @patch_replay(f"{__name__}.describe")
     @set_replay(file=file)
-    def recorder(): return _function()
+    def recorder():
+        return _function()
 
     assert recorder()
 
     mock_save.assert_called_once_with(file)
 
+
 def test_record_replay():
     @patch_replay(f"{__name__}.multiply")
     @patch_replay(f"{__name__}.describe")
     @set_replay(file=file)
-    def _func(): return _function()
+    def _func():
+        return _function()
+
     for _r in [True, False]:
         r_func = set_replay(record=_r)(_func)
         assert r_func.record == _r

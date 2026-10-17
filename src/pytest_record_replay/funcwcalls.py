@@ -7,7 +7,6 @@ import inspect
 from pathlib import Path
 from typing import Any, Callable, Generic, List, Literal, Optional, Union, overload
 import unittest
-import warnings
 
 import dill
 
