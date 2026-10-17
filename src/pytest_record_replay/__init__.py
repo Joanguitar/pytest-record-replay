@@ -6,7 +6,7 @@ lightweight. They are available directly from :mod:`pytest_record_replay`.
 
 from importlib import import_module
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 ___imports = {
     ".util": ["recording", "record"],

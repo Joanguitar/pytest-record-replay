@@ -103,14 +103,10 @@ def test_function_wrapper_warns(tmp_path):
     calls = [Call("identity", (), {}, None)]
 
     with pytest.raises(AttributeError):
-        FunctionWCalls(
-            identity, calls=calls, file=tmp_path / "calls.pkl", record=False
-        )
+        FunctionWCalls(identity, calls=calls, file=tmp_path / "calls.pkl", record=False)
 
     with pytest.raises(AttributeError):
-        FunctionWCalls(
-            identity, calls=calls, path=tmp_path, record=False
-        )
+        FunctionWCalls(identity, calls=calls, path=tmp_path, record=False)
 
     with pytest.raises(AttributeError):
         FunctionWCalls(

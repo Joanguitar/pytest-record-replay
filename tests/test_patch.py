@@ -260,14 +260,13 @@ def example():
 
 
 example_calls = []
-with record(True), set_calls(example_calls), patch_replay(f"{__name__}.multiply"), patch_replay(
-    f"{__name__}.describe"
-):
+with record(True), set_calls(example_calls), patch_replay(
+    f"{__name__}.multiply"
+), patch_replay(f"{__name__}.describe"):
     example()
 
+
 def test_patched_classes(tmp_path: Path):
-
-
     @set_replay(path=tmp_path)
     @patch_replay(f"{__name__}.multiply")
     @patch_replay(f"{__name__}.describe")
@@ -276,7 +275,6 @@ def test_patched_classes(tmp_path: Path):
 
         def test_example(self):
             example()
-
 
     class TestDecoratedMethod(TestCase):
         """Class with decorated methods"""
@@ -287,7 +285,6 @@ def test_patched_classes(tmp_path: Path):
         def test_example(self):
             example()
 
-
     @set_replay(path=tmp_path)
     @patch_replay(f"{__name__}.multiply")
     class TestDecoratedClassAndMethod(TestCase):
@@ -297,17 +294,17 @@ def test_patched_classes(tmp_path: Path):
         def test_example(self):
             example()
 
-
     class TestAPosteriori(TestCase):
         """Class with methods that are decorated a posteriori"""
 
         def test_example(self):
             example()
 
-
-    TestAPosteriori.test_example = set_replay(path=tmp_path)(patch_replay(f"{__name__}.multiply")(
-        patch_replay(f"{__name__}.describe")(TestAPosteriori.test_example)
-    ))
+    TestAPosteriori.test_example = set_replay(path=tmp_path)(
+        patch_replay(f"{__name__}.multiply")(
+            patch_replay(f"{__name__}.describe")(TestAPosteriori.test_example)
+        )
+    )
 
     for _r in [True, False]:
         with record(_r):
@@ -316,14 +313,17 @@ def test_patched_classes(tmp_path: Path):
                 TestDecoratedClass,
                 TestDecoratedMethod,
                 TestDecoratedClassAndMethod,
-                TestAPosteriori,]:
+                TestAPosteriori,
+            ]:
                 test_case("test_example").run()
 
 
 @pytest.mark.parametrize("n_files", [1, 2, 5])
 @patch("pytest_record_replay.funcwcalls.FunctionWCalls._load")
 def test_multiple_files(mock_load: Mock, monkeypatch, n_files: int):
-    monkeypatch.setattr(FunctionWCalls, "files", [Path(f"file{ii}.pkl") for ii in range(n_files)])
+    monkeypatch.setattr(
+        FunctionWCalls, "files", [Path(f"file{ii}.pkl") for ii in range(n_files)]
+    )
     mock_load.side_effect = lambda _: example_calls.copy()
 
     @set_replay(record=False)
