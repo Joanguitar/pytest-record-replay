@@ -25,6 +25,9 @@ timestamp = datetime.now().isoformat().replace(":", "-")
 _calls_context: ContextVar[Optional[List[Call]]] = ContextVar(
     "pytest_record_replay_set_calls", default=None
 )
+_skip_recording: ContextVar[bool] = ContextVar(
+    "pytest_record_replay_skip_recording", default=False
+)
 
 
 def recording() -> bool:
@@ -70,10 +73,17 @@ def get_calls() -> List[Call]:
     return calls
 
 
-def _configure_patch(record: bool):
-    """Set the session-wide recording mode used outside ``record`` contexts."""
-    global _recording
-    _recording = record
+@contextmanager
+def disable_recording() -> Generator[None, None, None]:
+    token = _skip_recording.set(True)
+    try:
+        yield
+    finally:
+        _skip_recording.reset(token)
+
+
+def recording_disabled() -> bool:
+    return _skip_recording.get()
 
 
 def _for_update(arg: R, rarg: R) -> Optional[R]:

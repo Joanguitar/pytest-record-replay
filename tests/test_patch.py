@@ -26,6 +26,10 @@ from helpers import (
 )
 
 
+def multiply2(value):
+    return multiply(value) * 2
+
+
 def test_set_replay_uses_global_and_explicit_modes(monkeypatch):
     monkeypatch.setattr(util_module, "_recording", True)
 
@@ -223,6 +227,22 @@ def test_patch_context_set_calls():
             with patch_replay(f"{__name__}.multiply") as mock_multiply:
                 assert multiply(2) == 4
                 mock_multiply.assert_called_once()
+        assert len(calls) == _r
+        if _r:
+            assert calls[0].args == (2,)  # Only the second call got recorded
+
+
+def test_patch_nested():
+    calls = []
+    for _r in [True, False]:
+        with set_calls(calls), record(_r):
+            assert multiply2(1) == 4
+            with patch_replay(f"{__name__}.multiply") as mock_multiply, patch_replay(
+                f"{__name__}.multiply2"
+            ) as mock_multiply2:
+                assert multiply2(2) == 8
+                mock_multiply.assert_not_called()
+                mock_multiply2.assert_called_once()
         assert len(calls) == _r
         if _r:
             assert calls[0].args == (2,)  # Only the second call got recorded

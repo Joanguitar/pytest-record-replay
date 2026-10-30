@@ -27,7 +27,7 @@ def test_recall_rejects_keyword_argument_mismatch():
 
 
 def test_record_rejects_non_dillable_positional_argument():
-    mockr = MockR("dependency", dependency)
+    mockr = MockR("dependency", function=dependency)
     value = (item for item in ())
 
     with pytest.raises(ValueError, match="Argument .* is not picklable"):
@@ -36,7 +36,7 @@ def test_record_rejects_non_dillable_positional_argument():
 
 
 def test_record_rejects_non_dillable_keyword_argument():
-    mockr = MockR("dependency", dependency)
+    mockr = MockR("dependency", function=dependency)
     value = (item for item in ())
 
     with pytest.raises(ValueError, match="Keyword argument value=.* is not picklable"):
@@ -48,7 +48,7 @@ def test_record_rejects_non_dillable_output():
     def returns_generator():
         return (item for item in ())
 
-    mockr = MockR("dependency", returns_generator)
+    mockr = MockR("dependency", function=returns_generator)
 
     with pytest.raises(ValueError, match="Output .* is not picklable"):
         with record(True):
@@ -64,7 +64,9 @@ def test_recorded_call_deep_copies_args_kwargs_and_output():
     positional = ["before call"]
     keyword = {"items": ["before call"]}
     calls = []
-    recorder = MockR("mutate_inputs_and_return", mutate_inputs_and_return, calls=calls)
+    recorder = MockR(
+        "mutate_inputs_and_return", function=mutate_inputs_and_return, calls=calls
+    )
 
     with record(True):
         result = recorder(positional, keyword=keyword)
