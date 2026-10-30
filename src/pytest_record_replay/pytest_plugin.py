@@ -16,9 +16,9 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     """Set pytest-record-replay's recording mode from pytest's ``--record`` option."""
     record = config.getoption("--record")
-    from pytest_record_replay.util import _configure_patch
+    from pytest_record_replay import util
 
-    _configure_patch(record)
+    util._recording = record
 
 
 @pytest.fixture

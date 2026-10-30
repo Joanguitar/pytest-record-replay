@@ -1,8 +1,8 @@
 """Callable recording and replay primitives."""
 
-from abc import ABC
 from typing import (
     Any,
+    Callable,
     List,
     Optional,
 )
@@ -12,10 +12,14 @@ import dill
 
 from pytest_record_replay.typing import Call
 from pytest_record_replay import util
-from pytest_record_replay.util import _for_update, _update_argument, get_calls
+from pytest_record_replay.util import (
+    _for_update,
+    _update_argument,
+    get_calls,
+)
 
 
-class MockR(ABC, Mock):
+class MockR(Mock):
     """Mock that records calls to, or replays calls for, a target callable.
 
     The call history can be shared with a :class:`FunctionWCalls` wrapper.
@@ -24,7 +28,12 @@ class MockR(ABC, Mock):
     """
 
     def __init__(
-        self, target: str, *args, calls: Optional[List[Call]] = None, **kwargs
+        self,
+        target: str,
+        *args,
+        function: Callable | None = None,
+        calls: Optional[List[Call]] = None,
+        **kwargs,
     ):
         """Initialize the mock and optionally share an existing call list.
 
@@ -33,18 +42,16 @@ class MockR(ABC, Mock):
         after ``target``. Remaining positional and keyword arguments are
         passed to :class:`unittest.mock.Mock`.
         """
-        user_function = args[0] if args and callable(args[0]) else None
-        if user_function is not None:
-            args = args[1:]
         super().__init__(*args, **kwargs)
         self._target = target
         self._calls: Optional[List[Call]] = calls
         self._instance: Optional[Any] = None
         self._owner: Optional[type] = None
-        function = user_function
+        self._function: Callable
         if function is None:
-            function, _ = patch(self._target).get_original()
-        self._function = function
+            self._function, _ = patch(self._target).get_original()
+        else:
+            self._function = function
 
     @property
     def function(self):
@@ -63,6 +70,12 @@ class MockR(ABC, Mock):
         self._instance = instance
         self._owner = owner
         return self
+
+    def __call__(self, *args, **kwargs):
+        if util.recording() and util.skipping_mock():
+            # Bypass Mock
+            return self.function(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
 
     def _execute_mock_call(self, /, *args, **kwargs):
         """Dispatch the call according to the active recording mode."""
@@ -86,7 +99,8 @@ class MockR(ABC, Mock):
                 raise ValueError(f"Keyword argument {key}={value} is not picklable.")
         recorded_args = dill.copy(args)
         recorded_kwargs = dill.copy(kwargs)
-        output = self.function(*args, **kwargs)
+        with util.skip_mock():  # Force next calls to skip mocking
+            output = self.function(*args, **kwargs)
         if not dill.pickles(output, exact=True):
             raise ValueError(f"Output {output} is not picklable.")
         recorded_output = dill.copy(output)
