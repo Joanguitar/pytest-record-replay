@@ -72,7 +72,7 @@ class MockR(Mock):
         return self
 
     def __call__(self, *args, **kwargs):
-        if util.recording() and util.skipping_mock():
+        if util.recording() and util.recording_disabled():
             # Bypass Mock
             return self.function(*args, **kwargs)
         return super().__call__(*args, **kwargs)
@@ -99,7 +99,7 @@ class MockR(Mock):
                 raise ValueError(f"Keyword argument {key}={value} is not picklable.")
         recorded_args = dill.copy(args)
         recorded_kwargs = dill.copy(kwargs)
-        with util.skip_mock():  # Force next calls to skip mocking
+        with util.disable_recording():  # Force next calls to skip mocking
             output = self.function(*args, **kwargs)
         if not dill.pickles(output, exact=True):
             raise ValueError(f"Output {output} is not picklable.")

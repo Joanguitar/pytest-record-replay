@@ -25,8 +25,8 @@ timestamp = datetime.now().isoformat().replace(":", "-")
 _calls_context: ContextVar[Optional[List[Call]]] = ContextVar(
     "pytest_record_replay_set_calls", default=None
 )
-_skip_mock: ContextVar[bool] = ContextVar(
-    "pytest_record_replay_skip_mock", default=False
+_skip_recording: ContextVar[bool] = ContextVar(
+    "pytest_record_replay_skip_recording", default=False
 )
 
 
@@ -74,16 +74,16 @@ def get_calls() -> List[Call]:
 
 
 @contextmanager
-def skip_mock() -> Generator[None, None, None]:
-    token = _skip_mock.set(True)
+def disable_recording() -> Generator[None, None, None]:
+    token = _skip_recording.set(True)
     try:
         yield
     finally:
-        _skip_mock.reset(token)
+        _skip_recording.reset(token)
 
 
-def skipping_mock() -> bool:
-    return _skip_mock.get()
+def recording_disabled() -> bool:
+    return _skip_recording.get()
 
 
 def _for_update(arg: R, rarg: R) -> Optional[R]:
