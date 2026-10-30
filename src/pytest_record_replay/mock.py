@@ -31,7 +31,7 @@ class MockR(Mock):
         self,
         target: str,
         *args,
-        function: Callable | None = None,
+        function: Optional[Callable] = None,
         calls: Optional[List[Call]] = None,
         **kwargs,
     ):
