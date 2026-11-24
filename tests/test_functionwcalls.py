@@ -149,13 +149,16 @@ def test_function_wrapper_records_and_recalls_from_explicit_file(tmp_path, value
         assert replayer.calls == []
 
 
-def test_call_record_requires_empty_calls():
+def test_call_record_clears_existing_calls(tmp_path):
     funcwcalls = FunctionWCalls(
         identity, calls=[Call("identity", (), {}, None)], record=False
     )
+    funcwcalls.file = tmp_path / "calls.pkl"
 
-    with pytest.raises(AssertionError, match="Calls should be empty"):
-        funcwcalls._call_record()
+    assert funcwcalls._call_record() is None
+
+    assert funcwcalls.calls == []
+    assert funcwcalls.file.is_file()
 
 
 @patch("pytest_record_replay.funcwcalls.FunctionWCalls.save")
