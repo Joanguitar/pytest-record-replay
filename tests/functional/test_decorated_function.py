@@ -50,6 +50,30 @@ def test_multiple_functions_are_recorded():
             assert count[key] == recording()
 
 
+@patch_replay(f"{__name__}.multiply")
+@patch_replay(f"{__name__}.describe")
+@pytest.mark.parametrize("value", [False, True])
+def test_mark_parametrize_down(value: bool):
+    assert isinstance(value, bool)
+    with counting() as count:
+        assert multiply(10) == 20
+        assert describe("test") == {"name": "test", "active": True}
+        for key in ["multiply", "describe"]:
+            assert count[key] == recording()
+
+
+@pytest.mark.parametrize("value", [False, True])
+@patch_replay(f"{__name__}.multiply")
+@patch_replay(f"{__name__}.describe")
+def test_mark_parametrize_up(value: bool):
+    assert isinstance(value, bool)
+    with counting() as count:
+        assert multiply(10) == 20
+        assert describe("test") == {"name": "test", "active": True}
+        for key in ["multiply", "describe"]:
+            assert count[key] == recording()
+
+
 @patch("pytest_record_replay.funcwcalls.FunctionWCalls._save")
 def test_recording_will_always_save(mock_save: Mock):
     @set_replay(record=True)

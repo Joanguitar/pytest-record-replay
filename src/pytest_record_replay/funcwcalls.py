@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import wraps
 import inspect
+import os
 from pathlib import Path
 from typing import Any, Callable, Generic, List, Literal, Optional, Union, overload
 import unittest
@@ -190,11 +191,8 @@ class FunctionWCalls(Generic[P, R]):
 
         Calls are saved to ``file`` when set, or to the default directory with
         the module-level timestamp otherwise.
-
-        Raises:
-            AssertionError: If the shared call history is not empty.
         """
-        assert len(self.calls) == 0, "Calls should be empty before recording."
+        self.calls.clear()
         with record(True):
             output = self.func_r(*args, **kwargs)
             if self.file is None:
@@ -281,7 +279,12 @@ class FunctionWCalls(Generic[P, R]):
         if instance is not None:
             path = path / instance.__class__.__name__
 
-        path = path / function.__name__
+        name = function.__name__
+        current_test = os.environ.get("PYTEST_CURRENT_TEST", "")
+        node_name = current_test.split(" ", 1)[0].rsplit("::", 1)[-1]
+        if node_name == name or node_name.startswith(name + "["):
+            name = node_name
+        path = path / name
         return path
 
     @property

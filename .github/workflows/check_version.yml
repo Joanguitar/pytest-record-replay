@@ -12,12 +12,12 @@ jobs:
         id: pypi-version
         run: |
           pip install pytest-record-replay
-          echo "version=$(python -c 'import pytest_record_replay; print(pytest_record_replay.__version__)')" >> "$GITHUB_OUTPUT"
+          echo "version=$(python -m pip show pytest-record-replay | sed -n 's/^Version: //p')" >> "$GITHUB_OUTPUT"
       - name: Get current version
         id: current-version
         run: |
           pip install -e .
-          echo "version=$(python -c 'import pytest_record_replay; print(pytest_record_replay.__version__)')" >> "$GITHUB_OUTPUT"
+          echo "version=$(python -m pip show pytest-record-replay | sed -n 's/^Version: //p')" >> "$GITHUB_OUTPUT"
       - name: Check version
         env:
           PYPI_VERSION: ${{ steps.pypi-version.outputs.version }}
